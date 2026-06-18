@@ -8,7 +8,7 @@ const COLORS = [
   { id: 'orange', label: 'Orange', hex: '#FB923C' },
 ]
 
-export default function UserSetup({ onSetup, onGoogleSignIn, googleDisplayName = '', isAdmin = false }) {
+export default function UserSetup({ onSetup, onGoogleSignIn, googleDisplayName = '', isAdmin = false, bookTitle = 'this book' }) {
   const [name, setName] = useState(googleDisplayName)
   const [color, setColor] = useState(COLORS[0].id)
   const [googleLoading, setGoogleLoading] = useState(false)
@@ -30,7 +30,7 @@ export default function UserSetup({ onSetup, onGoogleSignIn, googleDisplayName =
     setGoogleLoading(true)
     setGoogleError('')
     try {
-      await onGoogleSignIn() // initiates redirect — page navigates away
+      await onGoogleSignIn() // opens popup; auth state change drives the rest
     } catch (err) {
       setGoogleError('Google sign-in failed. Please try again.')
       setGoogleLoading(false)
@@ -48,7 +48,7 @@ export default function UserSetup({ onSetup, onGoogleSignIn, googleDisplayName =
           <span>MassRead</span>
         </div>
         <h1>Join the reading</h1>
-        <p>You're about to read <em>The Great Gatsby</em> with others.<br />Set up your reader profile to get started.</p>
+        <p>You're about to read <em>{bookTitle}</em> with others.<br />Set up your reader profile to get started.</p>
 
         {onGoogleSignIn && (
           <div className="google-signin-section">

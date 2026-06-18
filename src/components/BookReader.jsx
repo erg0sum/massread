@@ -1,8 +1,19 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import ePub from 'epubjs'
 import { COLORS } from './UserSetup'
 
 const COLOR_MAP = Object.fromEntries(COLORS.map((c) => [c.id, c.hex]))
+
+// epub.js nav.toc is a tree — chapters are often nested under a parent as
+// `subitems`. Flatten it so every level is selectable, tagging each with its
+// depth for indentation.
+function flattenToc(items, depth = 0, out = []) {
+  for (const item of items) {
+    out.push({ href: item.href, label: item.label?.trim() || '', depth })
+    if (item.subitems?.length) flattenToc(item.subitems, depth + 1, out)
+  }
+  return out
+}
 
 // Convert a hex color to a transparent rgba for highlight fill
 function hexToRgba(hex, alpha = 0.35) {
@@ -14,16 +25,22 @@ function hexToRgba(hex, alpha = 0.35) {
 
 export default function BookReader({
   bookUrl,
+  bookTitle,
+  bookAuthor,
   highlights,
   activeHighlightId,
   userColor,
   isAdmin,
   homework,
+  books = [],
+  activeBookId,
+  adminError,
   onHighlightCreated,
   onHighlightClick,
   onHighlightDelete,
   onSetHomework,
   onClearHomework,
+  onSetActiveBook,
 }) {
   const viewerRef = useRef(null)
   const bookRef = useRef(null)
@@ -33,12 +50,25 @@ export default function BookReader({
   const [loading, setLoading] = useState(true)
   const [selectionPopup, setSelectionPopup] = useState(null) // { cfiRange, x, y }
   const appliedHighlightsRef = useRef(new Set())
-  const [hwStart, setHwStart] = useState('')
-  const [hwEnd, setHwEnd] = useState('')
+  // Hrefs of the sections the admin has checked for homework
+  const [hwSelected, setHwSelected] = useState(() => new Set())
+
+  // Flattened table of contents (all nesting levels), for display and selects
+  const flatToc = useMemo(() => flattenToc(toc), [toc])
+
+  // Seed the admin's homework checkboxes from the currently-assigned sections
+  useEffect(() => {
+    setHwSelected(new Set(homework?.sections?.map((s) => s.href) ?? []))
+  }, [homework])
 
   // ── Boot epub.js ──────────────────────────────────────────────
   useEffect(() => {
     if (!viewerRef.current || !bookUrl) return
+
+    // Fresh book — forget which highlights were applied to the previous one
+    appliedHighlightsRef.current = new Set()
+    setToc([])
+    setLoading(true)
 
     const book = ePub(bookUrl)
     bookRef.current = book
@@ -58,12 +88,7 @@ export default function BookReader({
     })
 
     book.loaded.navigation.then((nav) => {
-      const items = nav.toc || []
-      setToc(items)
-      if (items.length > 0) {
-        setHwStart(items[0].href)
-        setHwEnd(items[items.length - 1].href)
-      }
+      setToc(nav.toc || [])
     })
 
     // Dark theme injected into the epub iframe
@@ -194,16 +219,22 @@ export default function BookReader({
   }, [])
 
   // ── Homework ─────────────────────────────────────────────────
-  function handleSetHomework() {
-    const startItem = toc.find((t) => t.href === hwStart)
-    const endItem = toc.find((t) => t.href === hwEnd)
-    if (!startItem || !endItem) return
-    onSetHomework({
-      startHref: startItem.href,
-      startLabel: startItem.label?.trim(),
-      endHref: endItem.href,
-      endLabel: endItem.label?.trim(),
+  function toggleSection(href) {
+    setHwSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(href)) next.delete(href)
+      else next.add(href)
+      return next
     })
+  }
+
+  function handleSetHomework() {
+    // Preserve reading order by filtering the flattened TOC
+    const sections = flatToc
+      .filter((t) => hwSelected.has(t.href))
+      .map((t) => ({ href: t.href, label: t.label }))
+    if (sections.length === 0) return
+    onSetHomework({ sections })
   }
 
   // ── Navigation ────────────────────────────────────────────────
@@ -228,50 +259,71 @@ export default function BookReader({
           </svg>
           <span className="toc-title">MassRead</span>
         </div>
-        <div className="toc-book-title">The Great Gatsby</div>
-        <div className="toc-author">F. Scott Fitzgerald</div>
+        <div className="toc-book-title">{bookTitle}</div>
+        <div className="toc-author">{bookAuthor}</div>
         <nav className="toc-list">
-          {toc.map((item) => (
+          {flatToc.map((item, i) => (
             <button
-              key={item.id || item.href}
+              key={`${item.href}-${i}`}
               className="toc-item"
+              style={{ paddingLeft: `${16 + item.depth * 14}px` }}
               onClick={() => jumpTo(item.href)}
             >
-              {item.label?.trim()}
+              {item.label}
             </button>
           ))}
         </nav>
 
+        {isAdmin && adminError && (
+          <div className="admin-error">{adminError}</div>
+        )}
+
+        {isAdmin && onSetActiveBook && books.length > 0 && (
+          <div className="homework-admin">
+            <div className="homework-admin-title">Active Book</div>
+            <select
+              className="homework-select"
+              value={activeBookId}
+              onChange={(e) => onSetActiveBook(e.target.value)}
+            >
+              {books.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.title}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {isAdmin && toc.length > 0 && (
           <div className="homework-admin">
             <div className="homework-admin-title">Set Homework</div>
-            <label className="homework-admin-label">From</label>
-            <select
-              className="homework-select"
-              value={hwStart}
-              onChange={(e) => setHwStart(e.target.value)}
-            >
-              {toc.map((item) => (
-                <option key={item.href} value={item.href}>
-                  {item.label?.trim()}
-                </option>
+            <p className="homework-admin-hint">
+              Pick any sections — they don't have to be next to each other.
+            </p>
+            <div className="homework-checklist">
+              {flatToc.map((item, i) => (
+                <label
+                  key={`${item.href}-${i}`}
+                  className="homework-check"
+                  style={{ paddingLeft: `${item.depth * 14}px` }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={hwSelected.has(item.href)}
+                    onChange={() => toggleSection(item.href)}
+                  />
+                  <span>{item.label}</span>
+                </label>
               ))}
-            </select>
-            <label className="homework-admin-label">To</label>
-            <select
-              className="homework-select"
-              value={hwEnd}
-              onChange={(e) => setHwEnd(e.target.value)}
-            >
-              {toc.map((item) => (
-                <option key={item.href} value={item.href}>
-                  {item.label?.trim()}
-                </option>
-              ))}
-            </select>
+            </div>
             <div className="homework-admin-actions">
-              <button className="homework-set-btn" onClick={handleSetHomework}>
-                Assign
+              <button
+                className="homework-set-btn"
+                onClick={handleSetHomework}
+                disabled={hwSelected.size === 0}
+              >
+                Assign{hwSelected.size > 0 ? ` (${hwSelected.size})` : ''}
               </button>
               {homework && (
                 <button className="homework-clear-btn" onClick={onClearHomework}>
@@ -299,16 +351,33 @@ export default function BookReader({
 
         {homework && (
           <div className="homework-banner">
-            <span className="homework-banner-label">Homework</span>
-            <span className="homework-banner-range">
-              {homework.startLabel} — {homework.endLabel}
-            </span>
-            <button
-              className="homework-jump-btn"
-              onClick={() => jumpTo(homework.startHref)}
-            >
-              Jump to start
-            </button>
+            <span className="homework-banner-label">Today's Reading</span>
+            {homework.sections ? (
+              <div className="homework-banner-sections">
+                {homework.sections.map((s, i) => (
+                  <button
+                    key={`${s.href}-${i}`}
+                    className="homework-section-chip"
+                    onClick={() => jumpTo(s.href)}
+                    title={`Jump to ${s.label}`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <>
+                <span className="homework-banner-range">
+                  {homework.startLabel} — {homework.endLabel}
+                </span>
+                <button
+                  className="homework-jump-btn"
+                  onClick={() => jumpTo(homework.startHref)}
+                >
+                  Jump to start
+                </button>
+              </>
+            )}
           </div>
         )}
 

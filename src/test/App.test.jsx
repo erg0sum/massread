@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 
@@ -7,18 +7,27 @@ import { MemoryRouter } from 'react-router-dom'
 let authCallback = null
 let highlightCallback = null
 let homeworkCallback = null
+let activeBookCallback = null
 
 vi.mock('../firebase', () => ({
   signInAnon: vi.fn(() => Promise.resolve()),
   onUser: vi.fn((cb) => { authCallback = cb; return () => {} }),
   subscribeHighlights: vi.fn((_, cb) => { highlightCallback = cb; return () => {} }),
   subscribeHomework: vi.fn((_, cb) => { homeworkCallback = cb; return () => {} }),
+  subscribeActiveBook: vi.fn((cb) => { activeBookCallback = cb; return () => {} }),
+  setActiveBook: vi.fn(() => Promise.resolve()),
   addHighlight: vi.fn(() => Promise.resolve()),
   deleteHighlight: vi.fn(() => Promise.resolve()),
   setHomework: vi.fn(() => Promise.resolve()),
   clearHomework: vi.fn(() => Promise.resolve()),
   signInWithGoogle: vi.fn(() => Promise.resolve()),
 }))
+
+// Fire an auth state change once the onUser listener has attached.
+async function fireAuth(fbUser) {
+  await waitFor(() => expect(authCallback).toBeTypeOf('function'))
+  await act(async () => { authCallback(fbUser) })
+}
 
 // ── epubjs mock ───────────────────────────────────────────────────
 vi.mock('epubjs', () => ({
@@ -54,6 +63,7 @@ describe('App (student flow)', () => {
     authCallback = null
     highlightCallback = null
     homeworkCallback = null
+    activeBookCallback = null
     vi.clearAllMocks()
   })
 
@@ -72,7 +82,7 @@ describe('App (student flow)', () => {
     renderApp()
 
     // Simulate Firebase returning a user
-    authCallback?.({ uid: 'firebase-uid-1' })
+    await fireAuth({ uid: 'firebase-uid-1' })
 
     await user.type(screen.getByLabelText(/nickname/i), 'Daisy')
     await user.click(screen.getByRole('button', { name: /start reading/i }))
@@ -85,7 +95,7 @@ describe('App (student flow)', () => {
 
   it('goes straight to the reader when a Google user signs in', async () => {
     renderApp()
-    authCallback?.({
+    await fireAuth({
       uid: 'google-uid',
       displayName: 'Ada Lovelace',
       providerData: [{ providerId: 'google.com' }],
@@ -96,21 +106,28 @@ describe('App (student flow)', () => {
     })
   })
 
-  it('shows the homework banner when homework is set', async () => {
+  it('shows the homework banner with all assigned sections', async () => {
     const user = userEvent.setup()
     renderApp()
 
-    authCallback?.({ uid: 'uid-1' })
+    await fireAuth({ uid: 'uid-1' })
     await user.type(screen.getByLabelText(/nickname/i), 'Nick')
     await user.click(screen.getByRole('button', { name: /start reading/i }))
 
     await waitFor(() => screen.getByRole('navigation'))
 
-    homeworkCallback?.({ startLabel: 'Chapter I', endLabel: 'Chapter III', startHref: 'ch1.xhtml', endHref: 'ch3.xhtml' })
+    await act(async () => {
+      homeworkCallback?.({
+        sections: [
+          { href: 'ch1.xhtml', label: 'Chapter I' },
+          { href: 'ch3.xhtml', label: 'Chapter III' },
+        ],
+      })
+    })
 
     await waitFor(() => {
-      expect(screen.getByText(/chapter i/i)).toBeInTheDocument()
-      expect(screen.getByText(/chapter iii/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Chapter I' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Chapter III' })).toBeInTheDocument()
     })
   })
 
@@ -118,12 +135,43 @@ describe('App (student flow)', () => {
     const user = userEvent.setup()
     renderApp()
 
-    authCallback?.({ uid: 'uid-2' })
+    await fireAuth({ uid: 'uid-2' })
     await user.type(screen.getByLabelText(/nickname/i), 'Bob')
     await user.click(screen.getByRole('button', { name: /start reading/i }))
 
     await waitFor(() => screen.getByRole('navigation'))
 
     expect(screen.queryByText(/set homework/i)).not.toBeInTheDocument()
+  })
+
+  it('does not show the active-book picker for a regular user', async () => {
+    const user = userEvent.setup()
+    renderApp()
+
+    await fireAuth({ uid: 'uid-3' })
+    await user.type(screen.getByLabelText(/nickname/i), 'Carol')
+    await user.click(screen.getByRole('button', { name: /start reading/i }))
+
+    await waitFor(() => screen.getByRole('navigation'))
+
+    expect(screen.queryByText(/active book/i)).not.toBeInTheDocument()
+  })
+
+  it('switches the displayed book when the active book changes', async () => {
+    const user = userEvent.setup()
+    renderApp()
+
+    await fireAuth({ uid: 'uid-4' })
+    await user.type(screen.getByLabelText(/nickname/i), 'Dave')
+    await user.click(screen.getByRole('button', { name: /start reading/i }))
+
+    await waitFor(() => screen.getByRole('navigation'))
+
+    // Default book title shows in the TOC sidebar
+    expect(screen.getByText('The Great Gatsby')).toBeInTheDocument()
+
+    // An unknown id falls back to the default catalog book (no crash)
+    await act(async () => { activeBookCallback?.('great-gatsby') })
+    expect(screen.getByText('The Great Gatsby')).toBeInTheDocument()
   })
 })

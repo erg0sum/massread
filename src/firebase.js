@@ -29,6 +29,12 @@
 //            && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
 //        }
 //      }
+//      // Global app config (e.g. the active book): anyone reads, admins write
+//      match /app/config {
+//        allow read: if request.auth != null;
+//        allow write: if request.auth != null
+//          && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+//      }
 //      // Admin registry: create docs here manually via Firebase console
 //      // Document ID = the admin's Firebase UID, content can be empty
 //      match /admins/{uid} {
@@ -53,7 +59,7 @@ import {
   query,
   orderBy,
 } from 'firebase/firestore'
-import { getAuth, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from 'firebase/auth'
+import { getAuth, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -74,19 +80,30 @@ export function signInAnon() {
   return signInAnonymously(auth)
 }
 
-export function signInWithGoogle() {
-  sessionStorage.setItem('google-pending', '1')
+export async function signInWithGoogle() {
   const provider = new GoogleAuthProvider()
-  return signInWithRedirect(auth, provider)
-}
-
-export async function getGoogleRedirectResult() {
-  const result = await getRedirectResult(auth)
-  return result?.user ?? null
+  const result = await signInWithPopup(auth, provider)
+  return result.user
 }
 
 export function onUser(cb) {
   return onAuthStateChanged(auth, cb)
+}
+
+// ── Active book (global config) ───────────────────────────────
+
+function appConfigRef() {
+  return doc(db, 'app', 'config')
+}
+
+export async function setActiveBook(bookId) {
+  return setDoc(appConfigRef(), { activeBookId: bookId }, { merge: true })
+}
+
+export function subscribeActiveBook(cb) {
+  return onSnapshot(appConfigRef(), (snap) => {
+    cb(snap.exists() ? snap.data().activeBookId ?? null : null)
+  })
 }
 
 // ── Highlights ────────────────────────────────────────────────
