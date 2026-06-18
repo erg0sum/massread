@@ -9,15 +9,19 @@
 //  service cloud.firestore {
 //    match /databases/{database}/documents {
 //      match /books/{bookId} {
+//        // Highlights require a non-anonymous (signed-in) user to create
 //        match /highlights/{highlightId} {
 //          allow read: if request.auth != null;
 //          allow create: if request.auth != null
+//            && request.auth.token.firebase.sign_in_provider != 'anonymous'
 //            && request.resource.data.authorUid == request.auth.uid;
 //          allow delete: if request.auth != null
 //            && resource.data.authorUid == request.auth.uid;
+//          // Comments require a non-anonymous (signed-in) user to create
 //          match /comments/{commentId} {
 //            allow read: if request.auth != null;
 //            allow create: if request.auth != null
+//              && request.auth.token.firebase.sign_in_provider != 'anonymous'
 //              && request.resource.data.authorUid == request.auth.uid;
 //            allow delete: if request.auth != null
 //              && resource.data.authorUid == request.auth.uid;
@@ -54,12 +58,13 @@ import {
   deleteDoc,
   setDoc,
   doc,
+  getDoc,
   onSnapshot,
   serverTimestamp,
   query,
   orderBy,
 } from 'firebase/firestore'
-import { getAuth, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
+import { getAuth, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -90,6 +95,22 @@ export function onUser(cb) {
   return onAuthStateChanged(auth, cb)
 }
 
+export function logOut() {
+  return signOut(auth)
+}
+
+// True if the signed-in user's UID has a document in the `admins` collection.
+// Rules allow a user to read only their own admins/{uid} doc.
+export async function isRegisteredAdmin(uid) {
+  if (!uid) return false
+  try {
+    const snap = await getDoc(doc(db, 'admins', uid))
+    return snap.exists()
+  } catch {
+    return false
+  }
+}
+
 // ── Active book (global config) ───────────────────────────────
 
 function appConfigRef() {
@@ -100,10 +121,20 @@ export async function setActiveBook(bookId) {
   return setDoc(appConfigRef(), { activeBookId: bookId }, { merge: true })
 }
 
+// Snapshot errors (e.g. a permission-denied before auth settles) are otherwise
+// logged by the SDK as "Uncaught"; swallow them quietly — the listener resubscribes.
+function onSnapError(label) {
+  return (err) => {
+    if (err?.code !== 'permission-denied') {
+      console.warn(`Firestore listener (${label}) error:`, err)
+    }
+  }
+}
+
 export function subscribeActiveBook(cb) {
   return onSnapshot(appConfigRef(), (snap) => {
     cb(snap.exists() ? snap.data().activeBookId ?? null : null)
-  })
+  }, onSnapError('activeBook'))
 }
 
 // ── Highlights ────────────────────────────────────────────────
@@ -128,7 +159,7 @@ export function subscribeHighlights(bookId, cb) {
   return onSnapshot(q, (snap) => {
     const highlights = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
     cb(highlights)
-  })
+  }, onSnapError('highlights'))
 }
 
 // ── Comments ──────────────────────────────────────────────────
@@ -167,7 +198,7 @@ export async function clearHomework(bookId) {
 export function subscribeHomework(bookId, cb) {
   return onSnapshot(homeworkRef(bookId), (snap) => {
     cb(snap.exists() ? snap.data() : null)
-  })
+  }, onSnapError('homework'))
 }
 
 export function subscribeComments(bookId, highlightId, cb) {
@@ -175,5 +206,5 @@ export function subscribeComments(bookId, highlightId, cb) {
   return onSnapshot(q, (snap) => {
     const comments = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
     cb(comments)
-  })
+  }, onSnapError('comments'))
 }

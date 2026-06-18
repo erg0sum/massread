@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import BookReader from './components/BookReader'
 import CommentSidebar from './components/CommentSidebar'
-import UserSetup, { COLORS } from './components/UserSetup'
+import UserSetup from './components/UserSetup'
 import {
   signInAnon,
   onUser,
@@ -11,6 +11,7 @@ import {
   subscribeHomework,
   subscribeActiveBook,
   signInWithGoogle,
+  logOut,
 } from './firebase'
 import { getBook, DEFAULT_BOOK_ID } from './books'
 import './styles/global.css'
@@ -22,23 +23,19 @@ export default function App() {
   const [activeHighlightId, setActiveHighlightId] = useState(null)
   const [homework, setHomeworkState] = useState(null)
   const [activeBookId, setActiveBookId] = useState(DEFAULT_BOOK_ID)
+  const [googleDisplayName, setGoogleDisplayName] = useState('')
   const activeBook = getBook(activeBookId)
 
   // ── Firebase auth ─────────────────────────────────────────────
   // Google sign-in uses signInWithPopup, which resolves in-page and fires
-  // onAuthStateChanged with the Google user — no redirect handshake needed.
+  // onAuthStateChanged with the Google user. We prefill the nickname from the
+  // Google profile but still let them confirm/change it on the setup screen.
   useEffect(() => {
     const unsub = onUser((fbUser) => {
       if (fbUser) {
         setFirebaseUser(fbUser)
         const isGoogle = fbUser.providerData?.some(p => p.providerId === 'google.com')
-        if (isGoogle) {
-          setUser(prev => prev ?? {
-            uid: fbUser.uid,
-            name: fbUser.displayName || 'Reader',
-            color: COLORS[fbUser.uid.charCodeAt(0) % COLORS.length].id,
-          })
-        }
+        setGoogleDisplayName(isGoogle ? (fbUser.displayName || '') : '')
       } else {
         signInAnon()
       }
@@ -47,31 +44,42 @@ export default function App() {
   }, [])
 
   // ── Subscribe to the admin's active book choice ───────────────
+  // Wait for auth — Firestore rules require a signed-in user to read.
   useEffect(() => {
+    if (!firebaseUser) return
     const unsub = subscribeActiveBook((id) => {
       if (id) setActiveBookId(id)
     })
     return unsub
-  }, [])
+  }, [firebaseUser])
 
   // ── Subscribe to highlights and homework for the active book ──
   useEffect(() => {
+    if (!firebaseUser) return
     setHighlights([])
     setActiveHighlightId(null)
     const unsub = subscribeHighlights(activeBookId, setHighlights)
     return unsub
-  }, [activeBookId])
+  }, [firebaseUser, activeBookId])
 
   useEffect(() => {
+    if (!firebaseUser) return
     setHomeworkState(null)
     const unsub = subscribeHomework(activeBookId, setHomeworkState)
     return unsub
-  }, [activeBookId])
+  }, [firebaseUser, activeBookId])
 
   // ── User setup callback ───────────────────────────────────────
   function handleSetup({ name, color }) {
     if (!firebaseUser) return
-    setUser({ uid: firebaseUser.uid, name, color })
+    const signedIn = firebaseUser.providerData?.some(p => p.providerId === 'google.com')
+    setUser({ uid: firebaseUser.uid, name, color, signedIn: !!signedIn })
+  }
+
+  async function handleLogOut() {
+    setUser(null)
+    setGoogleDisplayName('')
+    await logOut() // onUser(null) then re-signs in anonymously
   }
 
   // ── Highlight created from reader selection ───────────────────
@@ -106,6 +114,7 @@ export default function App() {
       <UserSetup
         onSetup={handleSetup}
         onGoogleSignIn={signInWithGoogle}
+        googleDisplayName={googleDisplayName}
         bookTitle={activeBook.title}
       />
     )
@@ -120,10 +129,13 @@ export default function App() {
         highlights={highlights}
         activeHighlightId={activeHighlightId}
         userColor={user.color}
+        userName={user.name}
+        canHighlight={user.signedIn}
         homework={homework}
         onHighlightCreated={handleHighlightCreated}
         onHighlightClick={setActiveHighlightId}
         onHighlightDelete={handleHighlightDelete}
+        onLogOut={handleLogOut}
       />
       <CommentSidebar
         bookId={activeBookId}

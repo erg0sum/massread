@@ -1,7 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import UserSetup from '../components/UserSetup'
+
+// UserSetup renders a <Link>, so it needs a Router context
+const render = (ui) => rtlRender(<MemoryRouter>{ui}</MemoryRouter>)
 
 describe('UserSetup', () => {
   it('renders the nickname label', () => {
@@ -81,6 +85,27 @@ describe('UserSetup', () => {
     expect(screen.getByLabelText(/nickname/i)).toHaveValue('Ada Lovelace')
   })
 
+  it('indicates the user is signed in once googleDisplayName is set', () => {
+    render(
+      <UserSetup
+        onSetup={() => {}}
+        onGoogleSignIn={() => Promise.resolve()}
+        googleDisplayName="Ada Lovelace"
+      />
+    )
+    // Signed-in confirmation + nickname prompt, no more "Continue with Google"
+    expect(screen.getByText(/signed in as/i)).toBeInTheDocument()
+    expect(screen.getByText(/choose a nickname to continue/i)).toBeInTheDocument()
+    expect(screen.getByText('next')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /continue with google/i })).not.toBeInTheDocument()
+  })
+
+  it('shows the "or" divider before signing in', () => {
+    render(<UserSetup onSetup={() => {}} onGoogleSignIn={() => Promise.resolve()} />)
+    expect(screen.getByText('or')).toBeInTheDocument()
+    expect(screen.queryByText('next')).not.toBeInTheDocument()
+  })
+
   it('pre-fills nickname when googleDisplayName arrives after mount', async () => {
     const { rerender } = render(
       <UserSetup
@@ -91,11 +116,13 @@ describe('UserSetup', () => {
     )
     expect(screen.getByLabelText(/nickname/i)).toHaveValue('')
     rerender(
-      <UserSetup
-        onSetup={() => {}}
-        onGoogleSignIn={() => Promise.resolve()}
-        googleDisplayName="Ada Lovelace"
-      />
+      <MemoryRouter>
+        <UserSetup
+          onSetup={() => {}}
+          onGoogleSignIn={() => Promise.resolve()}
+          googleDisplayName="Ada Lovelace"
+        />
+      </MemoryRouter>
     )
     await waitFor(() => {
       expect(screen.getByLabelText(/nickname/i)).toHaveValue('Ada Lovelace')

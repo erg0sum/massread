@@ -13,7 +13,8 @@ import CommentSidebar from '../components/CommentSidebar'
 import { subscribeComments } from '../firebase'
 
 const BOOK_ID = 'test-book'
-const USER = { uid: 'u1', name: 'Alice', color: 'yellow' }
+const USER = { uid: 'u1', name: 'Alice', color: 'yellow', signedIn: true }
+const ANON_USER = { uid: 'anon1', name: 'Guest', color: 'blue', signedIn: false }
 
 const makeHighlight = (overrides = {}) => ({
   id: 'h1',
@@ -158,5 +159,39 @@ describe('CommentSidebar', () => {
     // The active card gets the .active class
     const card = screen.getByText(/younger and more vulnerable/i).closest('.highlight-card')
     expect(card).toHaveClass('active')
+  })
+
+  it('shows the comment input for a signed-in user', async () => {
+    const user = userEvent.setup()
+    render(
+      <CommentSidebar
+        bookId={BOOK_ID}
+        highlights={[makeHighlight()]}
+        activeHighlightId={null}
+        user={USER}
+        onHighlightClick={() => {}}
+        onHighlightDelete={() => {}}
+      />
+    )
+    await user.click(screen.getByRole('button', { name: /comment/i }))
+    expect(screen.getByPlaceholderText(/add a comment/i)).toBeInTheDocument()
+    expect(screen.queryByText(/sign in with google to join/i)).not.toBeInTheDocument()
+  })
+
+  it('hides the comment input and prompts anonymous users to sign in', async () => {
+    const user = userEvent.setup()
+    render(
+      <CommentSidebar
+        bookId={BOOK_ID}
+        highlights={[makeHighlight()]}
+        activeHighlightId={null}
+        user={ANON_USER}
+        onHighlightClick={() => {}}
+        onHighlightDelete={() => {}}
+      />
+    )
+    await user.click(screen.getByRole('button', { name: /comment/i }))
+    expect(screen.queryByPlaceholderText(/add a comment/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/sign in with google to join/i)).toBeInTheDocument()
   })
 })

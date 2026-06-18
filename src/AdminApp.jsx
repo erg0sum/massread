@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import BookReader from './components/BookReader'
 import CommentSidebar from './components/CommentSidebar'
-import UserSetup, { COLORS } from './components/UserSetup'
-import AdminLogin from './components/AdminLogin'
+import UserSetup from './components/UserSetup'
+import AdminGate from './components/AdminGate'
 import {
   signInAnon,
   onUser,
@@ -15,37 +15,35 @@ import {
   subscribeActiveBook,
   setActiveBook,
   signInWithGoogle,
+  logOut,
+  isRegisteredAdmin,
 } from './firebase'
 import { BOOKS, getBook, DEFAULT_BOOK_ID } from './books'
 import './styles/global.css'
 
 export default function AdminApp() {
-  const [authed, setAuthed] = useState(() => sessionStorage.getItem('admin-authed') === '1')
   const [user, setUser] = useState(null)
   const [firebaseUser, setFirebaseUser] = useState(null)
+  // null = not yet checked, true/false = registry result
+  const [adminStatus, setAdminStatus] = useState(null)
   const [highlights, setHighlights] = useState([])
   const [activeHighlightId, setActiveHighlightId] = useState(null)
   const [homework, setHomeworkState] = useState(null)
   const [activeBookId, setActiveBookId] = useState(DEFAULT_BOOK_ID)
   const [adminError, setAdminError] = useState('')
+  const [googleDisplayName, setGoogleDisplayName] = useState('')
   const activeBook = getBook(activeBookId)
 
-  // Google sign-in uses signInWithPopup, which resolves in-page and fires
-  // onAuthStateChanged with the Google user — no redirect handshake needed.
+  const isGoogleUser = firebaseUser?.providerData?.some(p => p.providerId === 'google.com')
+
+  // Track auth. Admin status comes from the Firestore `admins` registry, which
+  // is the real, server-enforced source of truth — there is no client secret.
   useEffect(() => {
     const unsub = onUser((fbUser) => {
       if (fbUser) {
         setFirebaseUser(fbUser)
         const isGoogle = fbUser.providerData?.some(p => p.providerId === 'google.com')
-        const adminAuthed = sessionStorage.getItem('admin-authed') === '1'
-        if (isGoogle && adminAuthed) {
-          setUser(prev => prev ?? {
-            uid: fbUser.uid,
-            name: fbUser.displayName || 'Admin',
-            color: COLORS[fbUser.uid.charCodeAt(0) % COLORS.length].id,
-            isAdmin: true,
-          })
-        }
+        setGoogleDisplayName(isGoogle ? (fbUser.displayName || '') : '')
       } else {
         signInAnon()
       }
@@ -53,34 +51,48 @@ export default function AdminApp() {
     return unsub
   }, [])
 
+  // Once a Google user is present, check whether their UID is a registered admin
   useEffect(() => {
+    if (!firebaseUser || !isGoogleUser) {
+      setAdminStatus(null)
+      return
+    }
+    let cancelled = false
+    setAdminStatus(null)
+    isRegisteredAdmin(firebaseUser.uid).then((ok) => {
+      if (!cancelled) setAdminStatus(ok)
+    })
+    return () => { cancelled = true }
+  }, [firebaseUser, isGoogleUser])
+
+  // Wait for auth — Firestore rules require a signed-in user to read.
+  useEffect(() => {
+    if (!firebaseUser) return
     const unsub = subscribeActiveBook((id) => {
       if (id) setActiveBookId(id)
     })
     return unsub
-  }, [])
+  }, [firebaseUser])
 
   useEffect(() => {
+    if (!firebaseUser) return
     setHighlights([])
     setActiveHighlightId(null)
     const unsub = subscribeHighlights(activeBookId, setHighlights)
     return unsub
-  }, [activeBookId])
+  }, [firebaseUser, activeBookId])
 
   useEffect(() => {
+    if (!firebaseUser) return
     setHomeworkState(null)
     const unsub = subscribeHomework(activeBookId, setHomeworkState)
     return unsub
-  }, [activeBookId])
-
-  function handleAdminAuth() {
-    sessionStorage.setItem('admin-authed', '1')
-    setAuthed(true)
-  }
+  }, [firebaseUser, activeBookId])
 
   function handleSetup({ name, color }) {
     if (!firebaseUser) return
-    setUser({ uid: firebaseUser.uid, name, color, isAdmin: true })
+    const signedIn = firebaseUser.providerData?.some(p => p.providerId === 'google.com')
+    setUser({ uid: firebaseUser.uid, name, color, isAdmin: true, signedIn: !!signedIn })
   }
 
   const handleHighlightCreated = useCallback(
@@ -145,11 +157,30 @@ export default function AdminApp() {
     }
   }, [])
 
-  if (!authed) return <AdminLogin onAuth={handleAdminAuth} />
+  async function handleLogOut() {
+    setUser(null)
+    setGoogleDisplayName('')
+    setAdminStatus(null)
+    await logOut() // onUser(null) then re-signs in anonymously
+  }
+
+  // Admin gate: must sign in with Google and be in the `admins` registry
+  if (!firebaseUser || !isGoogleUser) {
+    return <AdminGate status="signin" onGoogleSignIn={signInWithGoogle} />
+  }
+  if (adminStatus === null) {
+    return <AdminGate status="checking" />
+  }
+  if (adminStatus === false) {
+    return <AdminGate status="denied" uid={firebaseUser.uid} onLogOut={handleLogOut} />
+  }
+
+  // Registered admin — pick a nickname, then read
   if (!user) return (
     <UserSetup
       onSetup={handleSetup}
       onGoogleSignIn={signInWithGoogle}
+      googleDisplayName={googleDisplayName}
       isAdmin={true}
       bookTitle={activeBook.title}
     />
@@ -164,6 +195,8 @@ export default function AdminApp() {
         highlights={highlights}
         activeHighlightId={activeHighlightId}
         userColor={user.color}
+        userName={user.name}
+        canHighlight={user.signedIn}
         isAdmin={true}
         homework={homework}
         books={BOOKS}
@@ -175,6 +208,7 @@ export default function AdminApp() {
         onSetHomework={handleSetHomework}
         onClearHomework={handleClearHomework}
         onSetActiveBook={handleSetActiveBook}
+        onLogOut={handleLogOut}
       />
       <CommentSidebar
         bookId={activeBookId}

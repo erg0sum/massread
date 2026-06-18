@@ -21,6 +21,7 @@ vi.mock('../firebase', () => ({
   setHomework: vi.fn(() => Promise.resolve()),
   clearHomework: vi.fn(() => Promise.resolve()),
   signInWithGoogle: vi.fn(() => Promise.resolve()),
+  logOut: vi.fn(() => Promise.resolve()),
 }))
 
 // Fire an auth state change once the onUser listener has attached.
@@ -93,16 +94,40 @@ describe('App (student flow)', () => {
     })
   })
 
-  it('goes straight to the reader when a Google user signs in', async () => {
+  it('prefills the nickname from Google but still lets the user confirm it', async () => {
+    const user = userEvent.setup()
     renderApp()
     await fireAuth({
       uid: 'google-uid',
       displayName: 'Ada Lovelace',
       providerData: [{ providerId: 'google.com' }],
     })
+
+    // Still on the setup screen, with the nickname prefilled
+    expect(await screen.findByLabelText(/nickname/i)).toHaveValue('Ada Lovelace')
+    expect(screen.getByText(/join the reading/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /start reading/i }))
+
     await waitFor(() => {
-      expect(screen.queryByText(/join the reading/i)).not.toBeInTheDocument()
       expect(screen.getByRole('navigation')).toBeInTheDocument()
+    })
+  })
+
+  it('logs out and returns to the setup screen', async () => {
+    const user = userEvent.setup()
+    renderApp()
+
+    await fireAuth({ uid: 'uid-logout' })
+    await user.type(screen.getByLabelText(/nickname/i), 'Eve')
+    await user.click(screen.getByRole('button', { name: /start reading/i }))
+
+    await waitFor(() => screen.getByRole('navigation'))
+
+    await user.click(screen.getByRole('button', { name: /log out/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/join the reading/i)).toBeInTheDocument()
     })
   })
 

@@ -30,6 +30,8 @@ export default function BookReader({
   highlights,
   activeHighlightId,
   userColor,
+  userName,
+  canHighlight,
   isAdmin,
   homework,
   books = [],
@@ -41,6 +43,7 @@ export default function BookReader({
   onSetHomework,
   onClearHomework,
   onSetActiveBook,
+  onLogOut,
 }) {
   const viewerRef = useRef(null)
   const bookRef = useRef(null)
@@ -205,14 +208,14 @@ export default function BookReader({
 
   // ── Confirm highlight ────────────────────────────────────────
   const confirmHighlight = useCallback(() => {
-    if (!selectionPopup) return
+    if (!selectionPopup || !canHighlight) return
     onHighlightCreated(selectionPopup.cfiRange)
     setSelectionPopup(null)
     // Clear epub.js selection
     renditionRef.current?.getContents()?.forEach((c) => {
       c.window.getSelection()?.removeAllRanges()
     })
-  }, [selectionPopup, onHighlightCreated])
+  }, [selectionPopup, canHighlight, onHighlightCreated])
 
   const dismissPopup = useCallback(() => {
     setSelectionPopup(null)
@@ -333,6 +336,19 @@ export default function BookReader({
             </div>
           </div>
         )}
+
+        {onLogOut && (
+          <div className="toc-footer">
+            {userName && (
+              <span className="toc-user" title={userName}>
+                Reading as <strong>{userName}</strong>
+              </span>
+            )}
+            <button className="logout-btn" onClick={onLogOut}>
+              Log out
+            </button>
+          </div>
+        )}
       </aside>
 
       {/* Book Viewer */}
@@ -401,13 +417,17 @@ export default function BookReader({
               transform: 'translate(-50%, -100%)',
             }}
           >
-            <button className="popup-highlight-btn" onClick={confirmHighlight}>
-              <span
-                className="popup-color-dot"
-                style={{ background: COLOR_MAP[userColor] }}
-              />
-              Highlight
-            </button>
+            {canHighlight ? (
+              <button className="popup-highlight-btn" onClick={confirmHighlight}>
+                <span
+                  className="popup-color-dot"
+                  style={{ background: COLOR_MAP[userColor] }}
+                />
+                Highlight
+              </button>
+            ) : (
+              <span className="popup-signin-note">Sign in with Google to highlight</span>
+            )}
             <button className="popup-dismiss" onClick={dismissPopup}>
               ✕
             </button>

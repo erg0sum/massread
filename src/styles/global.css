@@ -103,6 +103,49 @@ html, body, #root {
   color: var(--text);
 }
 
+/* ── TOC footer (user + logout) ───────────────────────────────── */
+.toc-footer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.toc-user {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toc-user strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.logout-btn {
+  flex-shrink: 0;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.logout-btn:hover {
+  color: var(--text);
+  border-color: var(--purple);
+}
+
 /* ── Reader Layout ────────────────────────────────────────────── */
 .reader-layout {
   display: flex;
@@ -247,6 +290,13 @@ html, body, #root {
 }
 
 .popup-dismiss:hover { color: var(--text); }
+
+.popup-signin-note {
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 2px 6px;
+  white-space: nowrap;
+}
 
 /* ── Comment Sidebar ──────────────────────────────────────────── */
 .comment-sidebar {
@@ -658,6 +708,36 @@ html, body, #root {
   color: #f87171 !important;
 }
 
+.google-signed-in {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: rgba(74, 222, 128, 0.10);
+  border: 1px solid rgba(74, 222, 128, 0.4);
+  border-radius: 8px;
+  padding: 11px 14px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.google-signed-in strong { font-weight: 600; }
+
+.google-check {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #4ade80;
+  color: #0f0f13;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+
 .setup-divider {
   display: flex;
   align-items: center;
@@ -892,6 +972,101 @@ html, body, #root {
   color: #f87171;
   border-color: #f87171;
 }
+
+/* ── Setup note (commenting requires sign-in) ─────────────────── */
+.setup-note {
+  font-size: 13px !important;
+  color: var(--text-muted) !important;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 24px !important;
+  line-height: 1.5 !important;
+}
+
+.setup-note strong { color: var(--text); font-weight: 600; }
+
+/* ── Comment sign-in note ─────────────────────────────────────── */
+.comment-signin-note {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ── Setup terms link ─────────────────────────────────────────── */
+.setup-terms {
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.setup-terms a {
+  color: var(--purple-light);
+  text-decoration: none;
+}
+
+.setup-terms a:hover { text-decoration: underline; }
+
+/* ── Legal pages (Terms of Use, etc.) ─────────────────────────── */
+.legal-page {
+  min-height: 100vh;
+  background: var(--bg);
+  display: flex;
+  justify-content: center;
+  padding: 48px 24px;
+  overflow-y: auto;
+}
+
+.legal-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 40px 44px;
+  max-width: 720px;
+  width: 100%;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+}
+
+.legal-card h1 {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  margin: 20px 0 4px;
+}
+
+.legal-updated {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+
+.legal-card h2 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 24px 0 8px;
+}
+
+.legal-card p {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+.legal-back {
+  display: inline-block;
+  margin-top: 28px;
+  color: var(--purple-light);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.legal-back:hover { text-decoration: underline; }
 
 /* ── epub content theming (injected into iframe) ──────────────── */
 /* epub.js allows injecting CSS via rendition.themes.register() — handled in BookReader.jsx */
