@@ -95,7 +95,6 @@ export default function App() {
         color: user.color,
         authorName: user.name,
         authorUid: user.uid,
-        commentCount: 0,
       })
     },
     [user, activeBookId]

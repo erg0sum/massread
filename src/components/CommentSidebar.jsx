@@ -21,11 +21,12 @@ function HighlightCard({ highlight, bookId, user, isActive, onClick, onDelete })
   const [posting, setPosting] = useState(false)
   const inputRef = useRef(null)
 
+  // Subscribe to this highlight's comments so the count badge is always live
+  // (the stored commentCount field was never maintained, so we derive it here).
   useEffect(() => {
-    if (!expanded) return
     const unsub = subscribeComments(bookId, highlight.id, setComments)
     return unsub
-  }, [expanded, bookId, highlight.id])
+  }, [bookId, highlight.id])
 
   // Auto-expand when this highlight is focused from the reader
   useEffect(() => {
@@ -98,7 +99,7 @@ function HighlightCard({ highlight, bookId, user, isActive, onClick, onDelete })
             setExpanded((v) => !v)
           }}
         >
-          {expanded ? '▲ Hide' : `💬 ${highlight.commentCount ?? 0} comment${(highlight.commentCount ?? 0) !== 1 ? 's' : ''}`}
+          {expanded ? '▲ Hide' : `💬 ${comments.length} comment${comments.length !== 1 ? 's' : ''}`}
         </button>
 
         {expanded && (

@@ -105,7 +105,6 @@ export default function AdminApp() {
         color: user.color,
         authorName: user.name,
         authorUid: user.uid,
-        commentCount: 0,
       })
     },
     [user, activeBookId]

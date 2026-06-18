@@ -129,8 +129,7 @@ describe('CommentSidebar', () => {
     expect(onClick).toHaveBeenCalledWith('h1')
   })
 
-  it('subscribes to comments when a card is expanded', async () => {
-    const user = userEvent.setup()
+  it('subscribes to comments on mount (for the live count)', () => {
     render(
       <CommentSidebar
         bookId={BOOK_ID}
@@ -141,8 +140,26 @@ describe('CommentSidebar', () => {
         onHighlightDelete={() => {}}
       />
     )
-    await user.click(screen.getByRole('button', { name: /comment/i }))
     expect(subscribeComments).toHaveBeenCalledWith(BOOK_ID, 'h1', expect.any(Function))
+  })
+
+  it('shows the live comment count from the subscription, not the stale field', () => {
+    // makeHighlight() has commentCount: 0, but there are really 2 comments
+    subscribeComments.mockImplementationOnce((_b, _h, cb) => {
+      cb([{ id: 'c1' }, { id: 'c2' }])
+      return () => {}
+    })
+    render(
+      <CommentSidebar
+        bookId={BOOK_ID}
+        highlights={[makeHighlight({ commentCount: 0 })]}
+        activeHighlightId={null}
+        user={USER}
+        onHighlightClick={() => {}}
+        onHighlightDelete={() => {}}
+      />
+    )
+    expect(screen.getByText(/2 comments/i)).toBeInTheDocument()
   })
 
   it('marks the active highlight card', () => {
