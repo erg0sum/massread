@@ -9,12 +9,11 @@ import {
   addHighlight,
   deleteHighlight,
   subscribeHomework,
+  subscribeActiveBook,
   signInWithGoogle,
 } from './firebase'
+import { getBook, DEFAULT_BOOK_ID } from './books'
 import './styles/global.css'
-
-const BOOK_ID = import.meta.env.VITE_BOOK_ID || 'great-gatsby'
-const BOOK_URL = '/gatsby.epub' // Place your epub in /public/gatsby.epub
 
 export default function App() {
   const [user, setUser] = useState(null)         // { uid, name, color, isAdmin }
@@ -22,38 +21,52 @@ export default function App() {
   const [highlights, setHighlights] = useState([])
   const [activeHighlightId, setActiveHighlightId] = useState(null)
   const [homework, setHomeworkState] = useState(null)
+  const [activeBookId, setActiveBookId] = useState(DEFAULT_BOOK_ID)
+  const activeBook = getBook(activeBookId)
 
   // ── Firebase auth ─────────────────────────────────────────────
+  // Google sign-in uses signInWithPopup, which resolves in-page and fires
+  // onAuthStateChanged with the Google user — no redirect handshake needed.
   useEffect(() => {
     const unsub = onUser((fbUser) => {
       if (fbUser) {
         setFirebaseUser(fbUser)
         const isGoogle = fbUser.providerData?.some(p => p.providerId === 'google.com')
         if (isGoogle) {
-          sessionStorage.removeItem('google-pending')
           setUser(prev => prev ?? {
             uid: fbUser.uid,
             name: fbUser.displayName || 'Reader',
             color: COLORS[fbUser.uid.charCodeAt(0) % COLORS.length].id,
           })
         }
-      } else if (!sessionStorage.getItem('google-pending')) {
+      } else {
         signInAnon()
       }
     })
     return unsub
   }, [])
 
-  // ── Subscribe to highlights and homework ──────────────────────
+  // ── Subscribe to the admin's active book choice ───────────────
   useEffect(() => {
-    const unsub = subscribeHighlights(BOOK_ID, setHighlights)
+    const unsub = subscribeActiveBook((id) => {
+      if (id) setActiveBookId(id)
+    })
     return unsub
   }, [])
 
+  // ── Subscribe to highlights and homework for the active book ──
   useEffect(() => {
-    const unsub = subscribeHomework(BOOK_ID, setHomeworkState)
+    setHighlights([])
+    setActiveHighlightId(null)
+    const unsub = subscribeHighlights(activeBookId, setHighlights)
     return unsub
-  }, [])
+  }, [activeBookId])
+
+  useEffect(() => {
+    setHomeworkState(null)
+    const unsub = subscribeHomework(activeBookId, setHomeworkState)
+    return unsub
+  }, [activeBookId])
 
   // ── User setup callback ───────────────────────────────────────
   function handleSetup({ name, color }) {
@@ -68,7 +81,7 @@ export default function App() {
       // Get the selected text from the CFI — we stored it on the rendition event
       // We'll truncate for display
       const quote = window.__lastSelectionText?.slice(0, 240) || cfiRange
-      await addHighlight(BOOK_ID, {
+      await addHighlight(activeBookId, {
         cfiRange,
         quote,
         color: user.color,
@@ -77,15 +90,15 @@ export default function App() {
         commentCount: 0,
       })
     },
-    [user]
+    [user, activeBookId]
   )
 
   const handleHighlightDelete = useCallback(
     async (highlightId) => {
-      await deleteHighlight(BOOK_ID, highlightId)
+      await deleteHighlight(activeBookId, highlightId)
       if (activeHighlightId === highlightId) setActiveHighlightId(null)
     },
-    [activeHighlightId]
+    [activeHighlightId, activeBookId]
   )
 
   if (!user) {
@@ -93,6 +106,7 @@ export default function App() {
       <UserSetup
         onSetup={handleSetup}
         onGoogleSignIn={signInWithGoogle}
+        bookTitle={activeBook.title}
       />
     )
   }
@@ -100,7 +114,9 @@ export default function App() {
   return (
     <div className="app">
       <BookReader
-        bookUrl={BOOK_URL}
+        bookUrl={activeBook.url}
+        bookTitle={activeBook.title}
+        bookAuthor={activeBook.author}
         highlights={highlights}
         activeHighlightId={activeHighlightId}
         userColor={user.color}
@@ -110,7 +126,7 @@ export default function App() {
         onHighlightDelete={handleHighlightDelete}
       />
       <CommentSidebar
-        bookId={BOOK_ID}
+        bookId={activeBookId}
         highlights={highlights}
         activeHighlightId={activeHighlightId}
         user={user}

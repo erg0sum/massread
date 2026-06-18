@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 
@@ -14,12 +14,20 @@ vi.mock('../firebase', () => ({
   onUser: vi.fn((cb) => { authCallback = cb; return () => {} }),
   subscribeHighlights: vi.fn((_, cb) => { cb([]); return () => {} }),
   subscribeHomework: vi.fn((_, cb) => { homeworkCallback = cb; return () => {} }),
+  subscribeActiveBook: vi.fn(() => () => {}),
+  setActiveBook: vi.fn(() => Promise.resolve()),
   addHighlight: vi.fn(() => Promise.resolve()),
   deleteHighlight: vi.fn(() => Promise.resolve()),
   setHomework: vi.fn(() => Promise.resolve()),
   clearHomework: vi.fn(() => Promise.resolve()),
   signInWithGoogle: vi.fn(() => Promise.resolve()),
 }))
+
+// Fire an auth state change once the onUser listener has attached.
+async function fireAuth(fbUser) {
+  await waitFor(() => expect(authCallback).toBeTypeOf('function'))
+  await act(async () => { authCallback(fbUser) })
+}
 
 // ── epubjs mock ───────────────────────────────────────────────────
 vi.mock('epubjs', () => ({
@@ -43,7 +51,20 @@ vi.mock('epubjs', () => ({
   }),
 }))
 
-import { setHomework } from '../firebase'
+// ── books catalog mock (two books so the picker is meaningful) ────
+const { TWO_BOOKS } = vi.hoisted(() => ({
+  TWO_BOOKS: [
+    { id: 'great-gatsby', title: 'The Great Gatsby', author: 'F. Scott Fitzgerald', url: '/gatsby.epub' },
+    { id: 'pride', title: 'Pride and Prejudice', author: 'Jane Austen', url: '/pride.epub' },
+  ],
+}))
+vi.mock('../books', () => ({
+  BOOKS: TWO_BOOKS,
+  DEFAULT_BOOK_ID: 'great-gatsby',
+  getBook: (id) => TWO_BOOKS.find((b) => b.id === id) || TWO_BOOKS[0],
+}))
+
+import { setHomework, setActiveBook } from '../firebase'
 
 async function renderAdminApp() {
   vi.stubEnv('VITE_ADMIN_CODE', ADMIN_CODE)
@@ -90,7 +111,7 @@ describe('AdminApp (admin flow)', () => {
     sessionStorage.setItem('admin-authed', '1')
     await renderAdminApp()
 
-    authCallback?.({
+    await fireAuth({
       uid: 'admin-uid',
       displayName: 'Prof Google',
       providerData: [{ providerId: 'google.com' }],
@@ -111,7 +132,7 @@ describe('AdminApp (admin flow)', () => {
     await user.click(screen.getByRole('button', { name: /continue/i }))
 
     // Step 2: nickname
-    authCallback?.({ uid: 'admin-uid' })
+    await fireAuth({ uid: 'admin-uid' })
     await user.type(await screen.findByLabelText(/nickname/i), 'Prof')
     await user.click(screen.getByRole('button', { name: /start reading/i }))
 
@@ -120,24 +141,35 @@ describe('AdminApp (admin flow)', () => {
     })
   })
 
-  it('calls setHomework with start and end labels when Assign is clicked', async () => {
+  it('assigns the checked sections when Assign is clicked', async () => {
     const user = userEvent.setup()
     await renderAdminApp()
 
     await user.type(screen.getByLabelText(/admin code/i), ADMIN_CODE)
     await user.click(screen.getByRole('button', { name: /continue/i }))
 
-    authCallback?.({ uid: 'admin-uid' })
+    await fireAuth({ uid: 'admin-uid' })
     await user.type(await screen.findByLabelText(/nickname/i), 'Prof')
     await user.click(screen.getByRole('button', { name: /start reading/i }))
 
     await waitFor(() => screen.getByText(/set homework/i))
 
+    // Assign is disabled until at least one section is checked
+    expect(screen.getByRole('button', { name: /assign/i })).toBeDisabled()
+
+    // Pick two arbitrary (non-adjacent in intent) sections
+    await user.click(screen.getByRole('checkbox', { name: 'Chapter I' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Chapter II' }))
     await user.click(screen.getByRole('button', { name: /assign/i }))
 
     expect(setHomework).toHaveBeenCalledWith(
       expect.any(String),
-      expect.objectContaining({ startLabel: 'Chapter I', endLabel: expect.any(String) })
+      {
+        sections: [
+          { href: 'ch1.xhtml', label: 'Chapter I' },
+          { href: 'ch2.xhtml', label: 'Chapter II' },
+        ],
+      }
     )
   })
 
@@ -148,7 +180,7 @@ describe('AdminApp (admin flow)', () => {
     await user.type(screen.getByLabelText(/admin code/i), ADMIN_CODE)
     await user.click(screen.getByRole('button', { name: /continue/i }))
 
-    authCallback?.({ uid: 'admin-uid' })
+    await fireAuth({ uid: 'admin-uid' })
     await user.type(await screen.findByLabelText(/nickname/i), 'Prof')
     await user.click(screen.getByRole('button', { name: /start reading/i }))
 
@@ -158,10 +190,50 @@ describe('AdminApp (admin flow)', () => {
     expect(screen.queryByRole('button', { name: /clear/i })).not.toBeInTheDocument()
 
     // Simulate homework being set
-    homeworkCallback?.({ startLabel: 'Chapter I', endLabel: 'Chapter II', startHref: 'ch1.xhtml', endHref: 'ch2.xhtml' })
+    homeworkCallback?.({ sections: [{ href: 'ch1.xhtml', label: 'Chapter I' }] })
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /clear/i })).toBeInTheDocument()
+    })
+  })
+
+  it('lets the admin pick the active book', async () => {
+    const user = userEvent.setup()
+    await renderAdminApp()
+
+    await user.type(screen.getByLabelText(/admin code/i), ADMIN_CODE)
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    await fireAuth({ uid: 'admin-uid' })
+    await user.type(await screen.findByLabelText(/nickname/i), 'Prof')
+    await user.click(screen.getByRole('button', { name: /start reading/i }))
+
+    // The Active Book panel and both catalog titles are present
+    const picker = await screen.findByDisplayValue('The Great Gatsby')
+    expect(screen.getByText('Active Book')).toBeInTheDocument()
+
+    await user.selectOptions(picker, 'pride')
+
+    expect(setActiveBook).toHaveBeenCalledWith('pride')
+  })
+
+  it('surfaces a permission error when an admin write is denied', async () => {
+    const user = userEvent.setup()
+    setActiveBook.mockRejectedValueOnce({ code: 'permission-denied' })
+    await renderAdminApp()
+
+    await user.type(screen.getByLabelText(/admin code/i), ADMIN_CODE)
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    await fireAuth({ uid: 'admin-uid' })
+    await user.type(await screen.findByLabelText(/nickname/i), 'Prof')
+    await user.click(screen.getByRole('button', { name: /start reading/i }))
+
+    const picker = await screen.findByDisplayValue('The Great Gatsby')
+    await user.selectOptions(picker, 'pride')
+
+    await waitFor(() => {
+      expect(screen.getByText(/registered as an admin/i)).toBeInTheDocument()
     })
   })
 })

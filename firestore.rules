@@ -1,0 +1,50 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Is the signed-in user a registered admin?
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    match /books/{bookId} {
+
+      // Highlights: any signed-in user reads; authors manage their own
+      match /highlights/{highlightId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null
+          && request.resource.data.authorUid == request.auth.uid;
+        allow delete: if request.auth != null
+          && resource.data.authorUid == request.auth.uid;
+
+        match /comments/{commentId} {
+          allow read: if request.auth != null;
+          allow create: if request.auth != null
+            && request.resource.data.authorUid == request.auth.uid;
+          allow delete: if request.auth != null
+            && resource.data.authorUid == request.auth.uid;
+        }
+      }
+
+      // Homework: anyone reads, only admins write
+      match /meta/homework {
+        allow read: if request.auth != null;
+        allow write: if isAdmin();
+      }
+    }
+
+    // Global app config (e.g. the active book): anyone reads, admins write
+    match /app/config {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    // Admin registry. Create a doc here per admin, ID = their Firebase UID
+    // (content can be empty). Manage these from the Firebase console only.
+    match /admins/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+  }
+}
