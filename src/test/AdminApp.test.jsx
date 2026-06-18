@@ -19,7 +19,6 @@ vi.mock('../firebase', () => ({
   setHomework: vi.fn(() => Promise.resolve()),
   clearHomework: vi.fn(() => Promise.resolve()),
   signInWithGoogle: vi.fn(() => Promise.resolve()),
-  getGoogleRedirectResult: vi.fn(() => Promise.resolve(null)),
 }))
 
 // ── epubjs mock ───────────────────────────────────────────────────
@@ -87,13 +86,15 @@ describe('AdminApp (admin flow)', () => {
     expect(await screen.findByText(/join the reading/i)).toBeInTheDocument()
   })
 
-  it('goes straight to the reader after Google redirect when admin code was entered', async () => {
-    // Simulate sessionStorage having the admin-authed flag (set before redirect)
+  it('goes straight to the reader when a Google user signs in after entering the admin code', async () => {
     sessionStorage.setItem('admin-authed', '1')
-    const { getGoogleRedirectResult } = await import('../firebase')
-    getGoogleRedirectResult.mockResolvedValueOnce({ uid: 'admin-uid', displayName: 'Prof Google' })
-
     await renderAdminApp()
+
+    authCallback?.({
+      uid: 'admin-uid',
+      displayName: 'Prof Google',
+      providerData: [{ providerId: 'google.com' }],
+    })
 
     await waitFor(() => {
       expect(screen.queryByText(/admin access/i)).not.toBeInTheDocument()

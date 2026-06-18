@@ -18,7 +18,6 @@ vi.mock('../firebase', () => ({
   setHomework: vi.fn(() => Promise.resolve()),
   clearHomework: vi.fn(() => Promise.resolve()),
   signInWithGoogle: vi.fn(() => Promise.resolve()),
-  getGoogleRedirectResult: vi.fn(() => Promise.resolve(null)),
 }))
 
 // ── epubjs mock ───────────────────────────────────────────────────
@@ -84,12 +83,13 @@ describe('App (student flow)', () => {
     })
   })
 
-  it('goes straight to the reader when Google redirect result is present', async () => {
-    const { getGoogleRedirectResult } = await import('../firebase')
-    getGoogleRedirectResult.mockResolvedValueOnce({ uid: 'google-uid', displayName: 'Ada Lovelace' })
-
+  it('goes straight to the reader when a Google user signs in', async () => {
     renderApp()
-
+    authCallback?.({
+      uid: 'google-uid',
+      displayName: 'Ada Lovelace',
+      providerData: [{ providerId: 'google.com' }],
+    })
     await waitFor(() => {
       expect(screen.queryByText(/join the reading/i)).not.toBeInTheDocument()
       expect(screen.getByRole('navigation')).toBeInTheDocument()
