@@ -8,19 +8,27 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
+    // A non-anonymous (e.g. Google) user — required to leave comments
+    function isSignedIn() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
     match /books/{bookId} {
 
-      // Highlights: any signed-in user reads; authors manage their own
+      // Highlights: anyone signed in reads; only non-anonymous users create;
+      // authors manage their own
       match /highlights/{highlightId} {
         allow read: if request.auth != null;
-        allow create: if request.auth != null
+        allow create: if isSignedIn()
           && request.resource.data.authorUid == request.auth.uid;
         allow delete: if request.auth != null
           && resource.data.authorUid == request.auth.uid;
 
+        // Comments: anyone signed in reads; only non-anonymous users create
         match /comments/{commentId} {
           allow read: if request.auth != null;
-          allow create: if request.auth != null
+          allow create: if isSignedIn()
             && request.resource.data.authorUid == request.auth.uid;
           allow delete: if request.auth != null
             && resource.data.authorUid == request.auth.uid;

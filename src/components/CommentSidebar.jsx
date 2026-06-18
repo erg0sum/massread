@@ -36,7 +36,7 @@ function HighlightCard({ highlight, bookId, user, isActive, onClick, onDelete })
   }, [isActive])
 
   async function postComment() {
-    if (!draft.trim() || posting) return
+    if (!user.signedIn || !draft.trim() || posting) return
     setPosting(true)
     await addComment(bookId, highlight.id, {
       text: draft.trim(),
@@ -128,28 +128,34 @@ function HighlightCard({ highlight, bookId, user, isActive, onClick, onDelete })
               </div>
             ))}
 
-            <div className="comment-input-row">
-              <span
-                className="author-dot small"
-                style={{ background: accentColor }}
-              />
-              <textarea
-                ref={inputRef}
-                className="comment-input"
-                placeholder="Add a comment… (⌘↵ to post)"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={handleKeyDown}
-                rows={2}
-              />
-              <button
-                className="post-btn"
-                onClick={postComment}
-                disabled={!draft.trim() || posting}
-              >
-                Post
-              </button>
-            </div>
+            {user.signedIn ? (
+              <div className="comment-input-row">
+                <span
+                  className="author-dot small"
+                  style={{ background: accentColor }}
+                />
+                <textarea
+                  ref={inputRef}
+                  className="comment-input"
+                  placeholder="Add a comment… (⌘↵ to post)"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  rows={2}
+                />
+                <button
+                  className="post-btn"
+                  onClick={postComment}
+                  disabled={!draft.trim() || posting}
+                >
+                  Post
+                </button>
+              </div>
+            ) : (
+              <p className="comment-signin-note">
+                Sign in with Google to join the discussion.
+              </p>
+            )}
           </div>
         )}
       </div>
