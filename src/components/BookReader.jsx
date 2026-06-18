@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import ePub from 'epubjs'
 import { COLORS } from './UserSetup'
 
@@ -337,18 +338,21 @@ export default function BookReader({
           </div>
         )}
 
-        {onLogOut && (
-          <div className="toc-footer">
-            {userName && (
-              <span className="toc-user" title={userName}>
-                Reading as <strong>{userName}</strong>
-              </span>
-            )}
-            <button className="logout-btn" onClick={onLogOut}>
-              Log out
-            </button>
-          </div>
-        )}
+        <div className="toc-footer">
+          {onLogOut && (
+            <div className="toc-footer-row">
+              {userName && (
+                <span className="toc-user" title={userName}>
+                  Reading as <strong>{userName}</strong>
+                </span>
+              )}
+              <button className="logout-btn" onClick={onLogOut}>
+                Log out
+              </button>
+            </div>
+          )}
+          <Link to="/terms" className="toc-terms">Terms of Use</Link>
+        </div>
       </aside>
 
       {/* Book Viewer */}

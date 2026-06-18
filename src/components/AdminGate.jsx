@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 
 // Gate shown on /admin before a registered admin reaches the reader.
 // `status` is 'signin' (needs Google sign-in), 'checking' (verifying), or
@@ -72,6 +73,10 @@ export default function AdminGate({ status, uid, onGoogleSignIn, onLogOut }) {
             {error && <p className="google-signin-error">{error}</p>}
           </>
         )}
+
+        <p className="setup-terms">
+          <Link to="/terms">Terms of Use</Link>
+        </p>
       </div>
     </div>
   )
