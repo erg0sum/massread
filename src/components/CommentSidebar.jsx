@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { subscribeComments, addComment, deleteComment } from '../firebase'
+import { usePersistentState, isMobileViewport } from '../usePersistentState'
 import { COLORS } from './UserSetup'
 
 const COLOR_MAP = Object.fromEntries(COLORS.map((c) => [c.id, c.hex]))
@@ -172,11 +173,43 @@ export default function CommentSidebar({
   onHighlightClick,
   onHighlightDelete,
 }) {
+  const [collapsed, setCollapsed] = usePersistentState(
+    'massread:notesCollapsed',
+    isMobileViewport
+  )
+
+  if (collapsed) {
+    return (
+      <aside className="comment-sidebar collapsed">
+        <button
+          className="sidebar-reopen"
+          onClick={() => setCollapsed(false)}
+          aria-label="Show highlights and notes"
+          title="Show highlights & notes"
+        >
+          <span className="sidebar-reopen-chevron" aria-hidden="true">‹</span>
+          <span className="highlight-count">{highlights.length}</span>
+          <span className="sidebar-reopen-label">Notes</span>
+        </button>
+      </aside>
+    )
+  }
+
   return (
     <aside className="comment-sidebar">
       <div className="sidebar-header">
-        <h2>Highlights & Notes</h2>
-        <span className="highlight-count">{highlights.length}</span>
+        <h2>Highlights &amp; Notes</h2>
+        <div className="sidebar-header-actions">
+          <span className="highlight-count">{highlights.length}</span>
+          <button
+            className="sidebar-collapse"
+            onClick={() => setCollapsed(true)}
+            aria-label="Hide highlights and notes"
+            title="Hide panel"
+          >
+            ›
+          </button>
+        </div>
       </div>
 
       {highlights.length === 0 ? (

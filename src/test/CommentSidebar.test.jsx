@@ -47,6 +47,72 @@ describe('CommentSidebar', () => {
     expect(screen.getByText(/select any text/i)).toBeInTheDocument()
   })
 
+  it('can be collapsed and reopened', async () => {
+    const user = userEvent.setup()
+    render(
+      <CommentSidebar
+        bookId={BOOK_ID}
+        highlights={[makeHighlight()]}
+        activeHighlightId={null}
+        user={USER}
+        onHighlightClick={() => {}}
+        onHighlightDelete={() => {}}
+      />
+    )
+    // Expanded: highlight content visible
+    expect(screen.getByText(/younger and more vulnerable/i)).toBeInTheDocument()
+
+    // Collapse — content hides, reopen control appears
+    await user.click(screen.getByRole('button', { name: /hide highlights/i }))
+    expect(screen.queryByText(/younger and more vulnerable/i)).not.toBeInTheDocument()
+
+    // Reopen — content returns
+    await user.click(screen.getByRole('button', { name: /show highlights/i }))
+    expect(screen.getByText(/younger and more vulnerable/i)).toBeInTheDocument()
+  })
+
+  it('remembers the collapsed state across remounts', async () => {
+    const user = userEvent.setup()
+    const props = {
+      bookId: BOOK_ID,
+      highlights: [makeHighlight()],
+      activeHighlightId: null,
+      user: USER,
+      onHighlightClick: () => {},
+      onHighlightDelete: () => {},
+    }
+    const { unmount } = render(<CommentSidebar {...props} />)
+    await user.click(screen.getByRole('button', { name: /hide highlights/i }))
+    unmount()
+
+    // Fresh mount reads the persisted preference → still collapsed
+    render(<CommentSidebar {...props} />)
+    expect(screen.getByRole('button', { name: /show highlights/i })).toBeInTheDocument()
+    expect(screen.queryByText(/younger and more vulnerable/i)).not.toBeInTheDocument()
+  })
+
+  it('defaults to collapsed on a mobile viewport', () => {
+    const original = window.matchMedia
+    window.matchMedia = (q) => ({ matches: true, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false, onchange: null })
+    try {
+      render(
+        <CommentSidebar
+          bookId={BOOK_ID}
+          highlights={[makeHighlight()]}
+          activeHighlightId={null}
+          user={USER}
+          onHighlightClick={() => {}}
+          onHighlightDelete={() => {}}
+        />
+      )
+      // Collapsed by default: reopen control present, content hidden
+      expect(screen.getByRole('button', { name: /show highlights/i })).toBeInTheDocument()
+      expect(screen.queryByText(/younger and more vulnerable/i)).not.toBeInTheDocument()
+    } finally {
+      window.matchMedia = original
+    }
+  })
+
   it('renders a highlight card with the quote', () => {
     render(
       <CommentSidebar

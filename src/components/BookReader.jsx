@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import ePub from 'epubjs'
+import { usePersistentState, isMobileViewport } from '../usePersistentState'
 import { COLORS } from './UserSetup'
 
 const COLOR_MAP = Object.fromEntries(COLORS.map((c) => [c.id, c.hex]))
@@ -50,10 +51,18 @@ export default function BookReader({
   const bookRef = useRef(null)
   const renditionRef = useRef(null)
   const [toc, setToc] = useState([])
+  const [tocCollapsed, setTocCollapsed] = usePersistentState(
+    'massread:tocCollapsed',
+    isMobileViewport
+  )
   const [currentSection, setCurrentSection] = useState('')
   const [loading, setLoading] = useState(true)
   const [selectionPopup, setSelectionPopup] = useState(null) // { cfiRange, x, y }
   const appliedHighlightsRef = useRef(new Set())
+  // True until we've decided the initial position; lets homework override the
+  // default start only when there's no saved reading position.
+  const pendingHomeworkJumpRef = useRef(false)
+  const lastCfiKey = `massread:lastCfi:${bookUrl}`
   // Hrefs of the sections the admin has checked for homework
   const [hwSelected, setHwSelected] = useState(() => new Set())
 
@@ -114,10 +123,28 @@ export default function BookReader({
     })
     rendition.themes.select('dark')
 
-    rendition.display()
+    // Resume the last read position if we have one; otherwise start at the
+    // default and let homework (once loaded) decide the opening location.
+    let savedCfi = null
+    try {
+      savedCfi = localStorage.getItem(lastCfiKey)
+    } catch {
+      /* ignore */
+    }
+    pendingHomeworkJumpRef.current = !savedCfi
+    if (savedCfi) rendition.display(savedCfi)
+    else rendition.display()
 
-    // Track section title
+    // Track section title + persist reading position
     rendition.on('relocated', (location) => {
+      const cfi = location?.start?.cfi
+      if (cfi) {
+        try {
+          localStorage.setItem(lastCfiKey, cfi)
+        } catch {
+          /* ignore */
+        }
+      }
       const href = location?.start?.href
       if (href && bookRef.current?.navigation) {
         const nav = bookRef.current.navigation
@@ -198,6 +225,16 @@ export default function BookReader({
     })
   }, [highlights, onHighlightClick])
 
+  // On first load (no saved position), open at the homework start once it loads
+  useEffect(() => {
+    if (!pendingHomeworkJumpRef.current || !renditionRef.current) return
+    const first = homework?.sections?.[0]?.href
+    if (first) {
+      pendingHomeworkJumpRef.current = false
+      renditionRef.current.display(first)?.catch?.(() => {})
+    }
+  }, [homework])
+
   // Scroll active highlight into view when sidebar selects one
   useEffect(() => {
     if (!activeHighlightId || !renditionRef.current) return
@@ -255,6 +292,19 @@ export default function BookReader({
   return (
     <div className="reader-layout">
       {/* TOC Sidebar */}
+      {tocCollapsed ? (
+        <aside className="toc-panel collapsed">
+          <button
+            className="sidebar-reopen"
+            onClick={() => setTocCollapsed(false)}
+            aria-label="Show table of contents"
+            title="Show contents"
+          >
+            <span className="sidebar-reopen-label">Contents</span>
+            <span className="sidebar-reopen-chevron" aria-hidden="true">›</span>
+          </button>
+        </aside>
+      ) : (
       <aside className="toc-panel">
         <div className="toc-header">
           <svg width="20" height="20" viewBox="0 0 32 32" fill="none">
@@ -262,6 +312,14 @@ export default function BookReader({
             <text x="16" y="23" fontFamily="serif" fontSize="20" fill="white" textAnchor="middle">M</text>
           </svg>
           <span className="toc-title">MassRead</span>
+          <button
+            className="sidebar-collapse"
+            onClick={() => setTocCollapsed(true)}
+            aria-label="Hide table of contents"
+            title="Hide contents"
+          >
+            ‹
+          </button>
         </div>
         <div className="toc-book-title">{bookTitle}</div>
         <div className="toc-author">{bookAuthor}</div>
@@ -354,6 +412,7 @@ export default function BookReader({
           <Link to="/terms" className="toc-terms">Terms of Use</Link>
         </div>
       </aside>
+      )}
 
       {/* Book Viewer */}
       <main className="viewer-area">
