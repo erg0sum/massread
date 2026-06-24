@@ -12,6 +12,7 @@
   "dependencies": {
     "epubjs": "^0.3.93",
     "firebase": "^12.15.0",
+    "firebase-functions": "^7.2.5",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.0",
