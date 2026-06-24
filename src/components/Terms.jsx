@@ -88,8 +88,8 @@ export default function Terms() {
 
         <h2>9. Contact</h2>
         <p>
-          Questions about these Terms of Use may be directed to the operators of
-          massread.com.
+          Questions about these Terms of Use, or any other support requests, may
+          be directed to <a href="mailto:admin@massread.com">admin@massread.com</a>.
         </p>
 
         <Link to="/" className="legal-back">← Back to MassRead</Link>

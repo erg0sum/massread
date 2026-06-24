@@ -444,7 +444,10 @@ export default function BookReader({
               {linkCopied ? '✓ Link copied' : '🔗 Copy link to this book'}
             </button>
           )}
-          <Link to="/terms" className="toc-terms">Terms of Use</Link>
+          <div className="toc-footer-links">
+            <Link to="/terms" className="toc-terms">Terms of Use</Link>
+            <a href="mailto:admin@massread.com" className="toc-terms">Support</a>
+          </div>
         </div>
       </aside>
       )}
