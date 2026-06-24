@@ -22,6 +22,8 @@ vi.mock('../firebase', () => ({
   clearHomework: vi.fn(() => Promise.resolve()),
   signInWithGoogle: vi.fn(() => Promise.resolve()),
   logOut: vi.fn(() => Promise.resolve()),
+  getUserProfile: vi.fn(() => Promise.resolve(null)),
+  saveUserProfile: vi.fn(() => Promise.resolve()),
 }))
 
 // Fire an auth state change once the onUser listener has attached.
@@ -51,9 +53,9 @@ vi.mock('epubjs', () => ({
 
 import App from '../App'
 
-function renderApp() {
+function renderApp(initialEntries = ['/']) {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <App />
     </MemoryRouter>
   )
@@ -94,7 +96,10 @@ describe('App (student flow)', () => {
     })
   })
 
-  it('prefills the nickname from Google but still lets the user confirm it', async () => {
+  it('suggests a random nickname for a new Google user and saves the choice', async () => {
+    const { getUserProfile, saveUserProfile } = await import('../firebase')
+    getUserProfile.mockResolvedValueOnce(null) // brand-new Google user
+
     const user = userEvent.setup()
     renderApp()
     await fireAuth({
@@ -103,15 +108,34 @@ describe('App (student flow)', () => {
       providerData: [{ providerId: 'google.com' }],
     })
 
-    // Still on the setup screen, with the nickname prefilled
-    expect(await screen.findByLabelText(/nickname/i)).toHaveValue('Ada Lovelace')
-    expect(screen.getByText(/join the reading/i)).toBeInTheDocument()
+    // Still on setup; a non-empty random nickname was suggested (not their name)
+    const input = await screen.findByLabelText(/nickname/i)
+    await waitFor(() => expect(input.value).not.toBe(''))
+    expect(input).not.toHaveValue('Ada Lovelace')
+    expect(screen.getByText(/signed in with google/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /start reading/i }))
 
-    await waitFor(() => {
-      expect(screen.getByRole('navigation')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('navigation')).toBeInTheDocument())
+    // The chosen nickname was persisted to the user's profile
+    expect(saveUserProfile).toHaveBeenCalledWith(
+      'google-uid',
+      expect.objectContaining({ nickname: input.value })
+    )
+  })
+
+  it('suggests the saved nickname for a returning Google user', async () => {
+    const { getUserProfile } = await import('../firebase')
+    getUserProfile.mockResolvedValueOnce({ nickname: 'VelvetHeron21' })
+
+    renderApp()
+    await fireAuth({
+      uid: 'google-returning',
+      displayName: 'Ada Lovelace',
+      providerData: [{ providerId: 'google.com' }],
     })
+
+    expect(await screen.findByLabelText(/nickname/i)).toHaveValue('VelvetHeron21')
   })
 
   it('logs out and returns to the setup screen', async () => {
@@ -198,5 +222,74 @@ describe('App (student flow)', () => {
     // An unknown id falls back to the default catalog book (no crash)
     await act(async () => { activeBookCallback?.('great-gatsby') })
     expect(screen.getByText('The Great Gatsby')).toBeInTheDocument()
+  })
+
+  it('opens a deep-linked book and ignores the global active book', async () => {
+    const user = userEvent.setup()
+    renderApp(['/?book=dracula'])
+
+    await fireAuth({ uid: 'uid-dl' })
+    await user.type(screen.getByLabelText(/nickname/i), 'Mina')
+    await user.click(screen.getByRole('button', { name: /start reading/i }))
+
+    await waitFor(() => screen.getByRole('navigation'))
+
+    // The deep-linked book is shown
+    expect(screen.getByText('Dracula')).toBeInTheDocument()
+
+    // The global active-book subscription is not even set up when deep-linked
+    const { subscribeActiveBook } = await import('../firebase')
+    expect(subscribeActiveBook).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the default book for an unknown deep link', async () => {
+    const user = userEvent.setup()
+    renderApp(['/?book=does-not-exist'])
+
+    await fireAuth({ uid: 'uid-bad' })
+    await user.type(screen.getByLabelText(/nickname/i), 'Lucy')
+    await user.click(screen.getByRole('button', { name: /start reading/i }))
+
+    await waitFor(() => screen.getByRole('navigation'))
+
+    expect(screen.getByText('The Great Gatsby')).toBeInTheDocument()
+  })
+
+  it('copies a deep link to the current book', async () => {
+    const user = userEvent.setup()
+    // Override the clipboard after userEvent.setup() (which installs its own stub)
+    const writeText = vi.fn(() => Promise.resolve())
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    })
+    renderApp(['/?book=dracula'])
+
+    await fireAuth({ uid: 'uid-copy' })
+    await user.type(screen.getByLabelText(/nickname/i), 'Jon')
+    await user.click(screen.getByRole('button', { name: /start reading/i }))
+
+    await waitFor(() => screen.getByRole('navigation'))
+
+    await user.click(screen.getByRole('button', { name: /copy link to this book/i }))
+
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('?book=dracula'))
+    expect(await screen.findByText(/link copied/i)).toBeInTheDocument()
+  })
+
+  it('offers other books as deep links', async () => {
+    const user = userEvent.setup()
+    renderApp(['/?book=dracula'])
+
+    await fireAuth({ uid: 'uid-other' })
+    await user.type(screen.getByLabelText(/nickname/i), 'Renfield')
+    await user.click(screen.getByRole('button', { name: /start reading/i }))
+
+    await waitFor(() => screen.getByRole('navigation'))
+
+    // Prompt references the current book and offers the other one as a link
+    expect(screen.getByText(/not interested in dracula/i)).toBeInTheDocument()
+    const link = screen.getByRole('link', { name: /the great gatsby/i })
+    expect(link).toHaveAttribute('href', expect.stringContaining('?book=great-gatsby'))
   })
 })

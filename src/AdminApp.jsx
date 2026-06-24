@@ -17,8 +17,11 @@ import {
   signInWithGoogle,
   logOut,
   isRegisteredAdmin,
+  getUserProfile,
+  saveUserProfile,
 } from './firebase'
 import { BOOKS, getBook, DEFAULT_BOOK_ID } from './books'
+import { randomNickname } from './nickname'
 import './styles/global.css'
 
 export default function AdminApp() {
@@ -31,7 +34,7 @@ export default function AdminApp() {
   const [homework, setHomeworkState] = useState(null)
   const [activeBookId, setActiveBookId] = useState(DEFAULT_BOOK_ID)
   const [adminError, setAdminError] = useState('')
-  const [googleDisplayName, setGoogleDisplayName] = useState('')
+  const [suggestedNickname, setSuggestedNickname] = useState('')
   const activeBook = getBook(activeBookId)
 
   const isGoogleUser = firebaseUser?.providerData?.some(p => p.providerId === 'google.com')
@@ -43,7 +46,13 @@ export default function AdminApp() {
       if (fbUser) {
         setFirebaseUser(fbUser)
         const isGoogle = fbUser.providerData?.some(p => p.providerId === 'google.com')
-        setGoogleDisplayName(isGoogle ? (fbUser.displayName || '') : '')
+        if (isGoogle) {
+          getUserProfile(fbUser.uid).then((profile) => {
+            setSuggestedNickname(profile?.nickname || randomNickname())
+          })
+        } else {
+          setSuggestedNickname('')
+        }
       } else {
         signInAnon()
       }
@@ -93,6 +102,7 @@ export default function AdminApp() {
     if (!firebaseUser) return
     const signedIn = firebaseUser.providerData?.some(p => p.providerId === 'google.com')
     setUser({ uid: firebaseUser.uid, name, color, isAdmin: true, signedIn: !!signedIn })
+    if (signedIn) saveUserProfile(firebaseUser.uid, { nickname: name, color }).catch(() => {})
   }
 
   const handleHighlightCreated = useCallback(
@@ -179,7 +189,7 @@ export default function AdminApp() {
     <UserSetup
       onSetup={handleSetup}
       onGoogleSignIn={signInWithGoogle}
-      googleDisplayName={googleDisplayName}
+      suggestedNickname={suggestedNickname}
       isAdmin={true}
       bookTitle={activeBook.title}
     />

@@ -48,6 +48,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // User profiles (e.g. saved nickname/color). Each user owns their own doc.
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
     // Admin registry. Create a doc here per admin, ID = their Firebase UID
     // (content can be empty). Manage these from the Firebase console only.
     match /admins/{uid} {

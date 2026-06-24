@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import BookReader from './components/BookReader'
 import CommentSidebar from './components/CommentSidebar'
 import UserSetup from './components/UserSetup'
@@ -12,30 +13,45 @@ import {
   subscribeActiveBook,
   signInWithGoogle,
   logOut,
+  getUserProfile,
+  saveUserProfile,
 } from './firebase'
-import { getBook, DEFAULT_BOOK_ID } from './books'
+import { BOOKS, getBook, DEFAULT_BOOK_ID } from './books'
+import { randomNickname } from './nickname'
 import './styles/global.css'
 
 export default function App() {
+  const [searchParams] = useSearchParams()
+  // Deep link: ?book=<id> pins the reader to a specific book, overriding the
+  // admin's global active-book choice. Ignored if the id isn't in the catalog.
+  const bookParam = searchParams.get('book')
+  const deeplinkBookId = BOOKS.some((b) => b.id === bookParam) ? bookParam : null
+
   const [user, setUser] = useState(null)         // { uid, name, color, isAdmin }
   const [firebaseUser, setFirebaseUser] = useState(null)
   const [highlights, setHighlights] = useState([])
   const [activeHighlightId, setActiveHighlightId] = useState(null)
   const [homework, setHomeworkState] = useState(null)
-  const [activeBookId, setActiveBookId] = useState(DEFAULT_BOOK_ID)
-  const [googleDisplayName, setGoogleDisplayName] = useState('')
+  const [activeBookId, setActiveBookId] = useState(deeplinkBookId || DEFAULT_BOOK_ID)
+  const [suggestedNickname, setSuggestedNickname] = useState('')
   const activeBook = getBook(activeBookId)
 
   // ── Firebase auth ─────────────────────────────────────────────
   // Google sign-in uses signInWithPopup, which resolves in-page and fires
-  // onAuthStateChanged with the Google user. We prefill the nickname from the
-  // Google profile but still let them confirm/change it on the setup screen.
+  // onAuthStateChanged with the Google user. For Google users we suggest a
+  // nickname: their saved one if they've set it before, otherwise a random one.
   useEffect(() => {
     const unsub = onUser((fbUser) => {
       if (fbUser) {
         setFirebaseUser(fbUser)
         const isGoogle = fbUser.providerData?.some(p => p.providerId === 'google.com')
-        setGoogleDisplayName(isGoogle ? (fbUser.displayName || '') : '')
+        if (isGoogle) {
+          getUserProfile(fbUser.uid).then((profile) => {
+            setSuggestedNickname(profile?.nickname || randomNickname())
+          })
+        } else {
+          setSuggestedNickname('')
+        }
       } else {
         signInAnon()
       }
@@ -43,15 +59,21 @@ export default function App() {
     return unsub
   }, [])
 
+  // ── Deep-linked book wins over the global active book ─────────
+  useEffect(() => {
+    if (deeplinkBookId) setActiveBookId(deeplinkBookId)
+  }, [deeplinkBookId])
+
   // ── Subscribe to the admin's active book choice ───────────────
   // Wait for auth — Firestore rules require a signed-in user to read.
+  // Skipped when a deep link pins a specific book.
   useEffect(() => {
-    if (!firebaseUser) return
+    if (!firebaseUser || deeplinkBookId) return
     const unsub = subscribeActiveBook((id) => {
       if (id) setActiveBookId(id)
     })
     return unsub
-  }, [firebaseUser])
+  }, [firebaseUser, deeplinkBookId])
 
   // ── Subscribe to highlights and homework for the active book ──
   useEffect(() => {
@@ -74,6 +96,8 @@ export default function App() {
     if (!firebaseUser) return
     const signedIn = firebaseUser.providerData?.some(p => p.providerId === 'google.com')
     setUser({ uid: firebaseUser.uid, name, color, signedIn: !!signedIn })
+    // Persist signed-in users' nickname so it's suggested on their next visit
+    if (signedIn) saveUserProfile(firebaseUser.uid, { nickname: name, color }).catch(() => {})
   }
 
   async function handleLogOut() {
@@ -113,7 +137,7 @@ export default function App() {
       <UserSetup
         onSetup={handleSetup}
         onGoogleSignIn={signInWithGoogle}
-        googleDisplayName={googleDisplayName}
+        suggestedNickname={suggestedNickname}
         bookTitle={activeBook.title}
       />
     )
@@ -130,6 +154,8 @@ export default function App() {
         userColor={user.color}
         userName={user.name}
         canHighlight={user.signedIn}
+        books={BOOKS}
+        activeBookId={activeBookId}
         homework={homework}
         onHighlightCreated={handleHighlightCreated}
         onHighlightClick={setActiveHighlightId}

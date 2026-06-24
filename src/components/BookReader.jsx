@@ -57,6 +57,7 @@ export default function BookReader({
   )
   const [currentSection, setCurrentSection] = useState('')
   const [loading, setLoading] = useState(true)
+  const [linkCopied, setLinkCopied] = useState(false)
   const [selectionPopup, setSelectionPopup] = useState(null) // { cfiRange, x, y }
   const appliedHighlightsRef = useRef(new Set())
   // True until we've decided the initial position; lets homework override the
@@ -68,6 +69,9 @@ export default function BookReader({
 
   // Flattened table of contents (all nesting levels), for display and selects
   const flatToc = useMemo(() => flattenToc(toc), [toc])
+
+  // Other catalog books, offered as deep links for readers who want a change
+  const otherBooks = books.filter((b) => b.id !== activeBookId)
 
   // Seed the admin's homework checkboxes from the currently-assigned sections
   useEffect(() => {
@@ -278,6 +282,18 @@ export default function BookReader({
     onSetHomework({ sections })
   }
 
+  // ── Share ────────────────────────────────────────────────────
+  function handleCopyLink() {
+    if (!activeBookId) return
+    const url = `${window.location.origin}/?book=${activeBookId}`
+    Promise.resolve(navigator.clipboard?.writeText(url))
+      .then(() => {
+        setLinkCopied(true)
+        setTimeout(() => setLinkCopied(false), 1500)
+      })
+      .catch(() => {})
+  }
+
   // ── Navigation ────────────────────────────────────────────────
   function prev() {
     renditionRef.current?.prev()
@@ -396,6 +412,20 @@ export default function BookReader({
           </div>
         )}
 
+        {otherBooks.length > 0 && (
+          <div className="other-books">
+            <div className="other-books-title">
+              Not interested in {bookTitle}? Try {otherBooks.length === 1 ? 'the following book' : 'one of these'}:
+            </div>
+            {otherBooks.map((b) => (
+              <Link key={b.id} to={`/?book=${b.id}`} className="other-book-link">
+                <span className="other-book-name">{b.title}</span>
+                <span className="other-book-author">{b.author}</span>
+              </Link>
+            ))}
+          </div>
+        )}
+
         <div className="toc-footer">
           {onLogOut && (
             <div className="toc-footer-row">
@@ -408,6 +438,11 @@ export default function BookReader({
                 Log out
               </button>
             </div>
+          )}
+          {activeBookId && (
+            <button className="copy-link-btn" onClick={handleCopyLink}>
+              {linkCopied ? '✓ Link copied' : '🔗 Copy link to this book'}
+            </button>
           )}
           <Link to="/terms" className="toc-terms">Terms of Use</Link>
         </div>
@@ -430,7 +465,7 @@ export default function BookReader({
 
         {homework && (
           <div className="homework-banner">
-            <span className="homework-banner-label">Today's Reading</span>
+            <span className="homework-banner-label">This Week's Reading</span>
             {homework.sections ? (
               <div className="homework-banner-sections">
                 {homework.sections.map((s, i) => (

@@ -21,6 +21,8 @@ vi.mock('../firebase', () => ({
   signInWithGoogle: vi.fn(() => Promise.resolve()),
   logOut: vi.fn(() => Promise.resolve()),
   isRegisteredAdmin: vi.fn(() => Promise.resolve(true)),
+  getUserProfile: vi.fn(() => Promise.resolve(null)),
+  saveUserProfile: vi.fn(() => Promise.resolve()),
 }))
 
 // Fire an auth state change once the onUser listener has attached.
@@ -128,10 +130,11 @@ describe('AdminApp (registry-based admin)', () => {
     expect(screen.queryByLabelText(/nickname/i)).not.toBeInTheDocument()
   })
 
-  it('lets a registered admin reach the nickname screen, prefilled', async () => {
+  it('lets a registered admin reach the nickname screen with a suggested nickname', async () => {
     renderAdminApp()
     const nick = await reachNicknameAsAdmin()
-    expect(nick).toHaveValue('Prof Google')
+    // A nickname is suggested (random here, since getUserProfile returns null)
+    await waitFor(() => expect(nick.value).not.toBe(''))
   })
 
   it('shows the admin homework panel after setup', async () => {
