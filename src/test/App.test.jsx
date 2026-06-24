@@ -124,9 +124,9 @@ describe('App (student flow)', () => {
     )
   })
 
-  it('suggests the saved nickname for a returning Google user', async () => {
+  it('takes a returning Google user straight to the book, skipping setup', async () => {
     const { getUserProfile } = await import('../firebase')
-    getUserProfile.mockResolvedValueOnce({ nickname: 'VelvetHeron21' })
+    getUserProfile.mockResolvedValueOnce({ nickname: 'VelvetHeron21', color: 'green' })
 
     renderApp()
     await fireAuth({
@@ -135,7 +135,9 @@ describe('App (student flow)', () => {
       providerData: [{ providerId: 'google.com' }],
     })
 
-    expect(await screen.findByLabelText(/nickname/i)).toHaveValue('VelvetHeron21')
+    // No setup screen — straight into the reader
+    await waitFor(() => expect(screen.getByRole('navigation')).toBeInTheDocument())
+    expect(screen.queryByText(/join the reading/i)).not.toBeInTheDocument()
   })
 
   it('logs out and returns to the setup screen', async () => {

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import BookReader from './components/BookReader'
 import CommentSidebar from './components/CommentSidebar'
-import UserSetup from './components/UserSetup'
+import UserSetup, { COLORS } from './components/UserSetup'
 import AdminGate from './components/AdminGate'
 import {
   signInAnon,
@@ -35,6 +35,7 @@ export default function AdminApp() {
   const [activeBookId, setActiveBookId] = useState(DEFAULT_BOOK_ID)
   const [adminError, setAdminError] = useState('')
   const [suggestedNickname, setSuggestedNickname] = useState('')
+  const [savedProfile, setSavedProfile] = useState(null)
   const activeBook = getBook(activeBookId)
 
   const isGoogleUser = firebaseUser?.providerData?.some(p => p.providerId === 'google.com')
@@ -48,6 +49,7 @@ export default function AdminApp() {
         const isGoogle = fbUser.providerData?.some(p => p.providerId === 'google.com')
         if (isGoogle) {
           getUserProfile(fbUser.uid).then((profile) => {
+            setSavedProfile(profile)
             setSuggestedNickname(profile?.nickname || randomNickname())
           })
         } else {
@@ -73,6 +75,19 @@ export default function AdminApp() {
     })
     return () => { cancelled = true }
   }, [firebaseUser, isGoogleUser])
+
+  // A returning admin with a saved profile skips the nickname screen
+  useEffect(() => {
+    if (adminStatus === true && !user && firebaseUser && savedProfile?.nickname) {
+      setUser({
+        uid: firebaseUser.uid,
+        name: savedProfile.nickname,
+        color: savedProfile.color || COLORS[0].id,
+        isAdmin: true,
+        signedIn: true,
+      })
+    }
+  }, [adminStatus, user, firebaseUser, savedProfile])
 
   // Wait for auth — Firestore rules require a signed-in user to read.
   useEffect(() => {
@@ -168,7 +183,8 @@ export default function AdminApp() {
 
   async function handleLogOut() {
     setUser(null)
-    setGoogleDisplayName('')
+    setSuggestedNickname('')
+    setSavedProfile(null)
     setAdminStatus(null)
     await logOut() // onUser(null) then re-signs in anonymously
   }

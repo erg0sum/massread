@@ -637,6 +637,18 @@ html, body, #root {
   margin-left: 6px;
 }
 
+.comment-moderated {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
 .comment-text {
   font-size: 13px;
   color: var(--text);

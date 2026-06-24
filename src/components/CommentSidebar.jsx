@@ -117,6 +117,11 @@ function HighlightCard({ highlight, bookId, user, isActive, onClick, onDelete })
                 <div className="comment-content">
                   <span className="comment-author">{c.authorName}</span>
                   <span className="comment-time">{timeAgo(c.createdAt)}</span>
+                  {c.moderated && (
+                    <span className="comment-moderated" title="Edited by automatic moderation">
+                      moderated
+                    </span>
+                  )}
                   {c.authorUid === user.uid && (
                     <button
                       className="delete-btn small"

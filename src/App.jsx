@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import BookReader from './components/BookReader'
 import CommentSidebar from './components/CommentSidebar'
-import UserSetup from './components/UserSetup'
+import UserSetup, { COLORS } from './components/UserSetup'
 import {
   signInAnon,
   onUser,
@@ -38,8 +38,8 @@ export default function App() {
 
   // ── Firebase auth ─────────────────────────────────────────────
   // Google sign-in uses signInWithPopup, which resolves in-page and fires
-  // onAuthStateChanged with the Google user. For Google users we suggest a
-  // nickname: their saved one if they've set it before, otherwise a random one.
+  // onAuthStateChanged with the Google user. Returning users (with a saved
+  // profile) go straight to the book; first-timers get a suggested nickname.
   useEffect(() => {
     const unsub = onUser((fbUser) => {
       if (fbUser) {
@@ -47,7 +47,16 @@ export default function App() {
         const isGoogle = fbUser.providerData?.some(p => p.providerId === 'google.com')
         if (isGoogle) {
           getUserProfile(fbUser.uid).then((profile) => {
-            setSuggestedNickname(profile?.nickname || randomNickname())
+            if (profile?.nickname) {
+              setUser({
+                uid: fbUser.uid,
+                name: profile.nickname,
+                color: profile.color || COLORS[0].id,
+                signedIn: true,
+              })
+            } else {
+              setSuggestedNickname(randomNickname())
+            }
           })
         } else {
           setSuggestedNickname('')
@@ -102,7 +111,7 @@ export default function App() {
 
   async function handleLogOut() {
     setUser(null)
-    setGoogleDisplayName('')
+    setSuggestedNickname('')
     await logOut() // onUser(null) then re-signs in anonymously
   }
 
