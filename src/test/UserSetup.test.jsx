@@ -74,28 +74,28 @@ describe('UserSetup', () => {
     expect(screen.getByRole('button', { name: /continue with google/i })).toBeInTheDocument()
   })
 
-  it('pre-fills nickname from googleDisplayName prop', () => {
+  it('pre-fills nickname from suggestedNickname prop', () => {
     render(
       <UserSetup
         onSetup={() => {}}
         onGoogleSignIn={() => Promise.resolve()}
-        googleDisplayName="Ada Lovelace"
+        suggestedNickname="Ada Lovelace"
       />
     )
     expect(screen.getByLabelText(/nickname/i)).toHaveValue('Ada Lovelace')
   })
 
-  it('indicates the user is signed in once googleDisplayName is set', () => {
+  it('indicates the user is signed in once suggestedNickname is set', () => {
     render(
       <UserSetup
         onSetup={() => {}}
         onGoogleSignIn={() => Promise.resolve()}
-        googleDisplayName="Ada Lovelace"
+        suggestedNickname="Ada Lovelace"
       />
     )
     // Signed-in confirmation + nickname prompt, no more "Continue with Google"
-    expect(screen.getByText(/signed in as/i)).toBeInTheDocument()
-    expect(screen.getByText(/choose a nickname to continue/i)).toBeInTheDocument()
+    expect(screen.getByText(/signed in with google/i)).toBeInTheDocument()
+    expect(screen.getByText(/keep it or pick your own/i)).toBeInTheDocument()
     expect(screen.getByText('next')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /continue with google/i })).not.toBeInTheDocument()
   })
@@ -106,12 +106,12 @@ describe('UserSetup', () => {
     expect(screen.queryByText('next')).not.toBeInTheDocument()
   })
 
-  it('pre-fills nickname when googleDisplayName arrives after mount', async () => {
+  it('pre-fills nickname when suggestedNickname arrives after mount', async () => {
     const { rerender } = render(
       <UserSetup
         onSetup={() => {}}
         onGoogleSignIn={() => Promise.resolve()}
-        googleDisplayName=""
+        suggestedNickname=""
       />
     )
     expect(screen.getByLabelText(/nickname/i)).toHaveValue('')
@@ -120,7 +120,7 @@ describe('UserSetup', () => {
         <UserSetup
           onSetup={() => {}}
           onGoogleSignIn={() => Promise.resolve()}
-          googleDisplayName="Ada Lovelace"
+          suggestedNickname="Ada Lovelace"
         />
       </MemoryRouter>
     )
@@ -129,12 +129,12 @@ describe('UserSetup', () => {
     })
   })
 
-  it('enables Start Reading when googleDisplayName is provided', () => {
+  it('enables Start Reading when suggestedNickname is provided', () => {
     render(
       <UserSetup
         onSetup={() => {}}
         onGoogleSignIn={() => Promise.resolve()}
-        googleDisplayName="Ada Lovelace"
+        suggestedNickname="Ada Lovelace"
       />
     )
     expect(screen.getByRole('button', { name: /start reading/i })).toBeEnabled()

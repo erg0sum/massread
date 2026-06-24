@@ -39,6 +39,10 @@
 //        allow write: if request.auth != null
 //          && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
 //      }
+//      // User profiles: each user owns their own doc (saved nickname/color)
+//      match /users/{uid} {
+//        allow read, write: if request.auth != null && request.auth.uid == uid;
+//      }
 //      // Admin registry: create docs here manually via Firebase console
 //      // Document ID = the admin's Firebase UID, content can be empty
 //      match /admins/{uid} {
@@ -97,6 +101,24 @@ export function onUser(cb) {
 
 export function logOut() {
   return signOut(auth)
+}
+
+// ── User profile ──────────────────────────────────────────────
+// Persists a signed-in user's chosen nickname (and color) so it survives
+// across sessions/devices. Rules allow a user to read/write only their own doc.
+export async function getUserProfile(uid) {
+  if (!uid) return null
+  try {
+    const snap = await getDoc(doc(db, 'users', uid))
+    return snap.exists() ? snap.data() : null
+  } catch {
+    return null
+  }
+}
+
+export async function saveUserProfile(uid, data) {
+  if (!uid) return
+  return setDoc(doc(db, 'users', uid), data, { merge: true })
 }
 
 // True if the signed-in user's UID has a document in the `admins` collection.

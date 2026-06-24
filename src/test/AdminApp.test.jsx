@@ -21,6 +21,8 @@ vi.mock('../firebase', () => ({
   signInWithGoogle: vi.fn(() => Promise.resolve()),
   logOut: vi.fn(() => Promise.resolve()),
   isRegisteredAdmin: vi.fn(() => Promise.resolve(true)),
+  getUserProfile: vi.fn(() => Promise.resolve(null)),
+  saveUserProfile: vi.fn(() => Promise.resolve()),
 }))
 
 // Fire an auth state change once the onUser listener has attached.
@@ -70,7 +72,7 @@ vi.mock('../books', () => ({
   getBook: (id) => TWO_BOOKS.find((b) => b.id === id) || TWO_BOOKS[0],
 }))
 
-import { isRegisteredAdmin, setHomework, setActiveBook } from '../firebase'
+import { isRegisteredAdmin, setHomework, setActiveBook, getUserProfile } from '../firebase'
 
 function renderAdminApp() {
   return render(
@@ -128,10 +130,21 @@ describe('AdminApp (registry-based admin)', () => {
     expect(screen.queryByLabelText(/nickname/i)).not.toBeInTheDocument()
   })
 
-  it('lets a registered admin reach the nickname screen, prefilled', async () => {
+  it('lets a registered admin reach the nickname screen with a suggested nickname', async () => {
     renderAdminApp()
     const nick = await reachNicknameAsAdmin()
-    expect(nick).toHaveValue('Prof Google')
+    // A nickname is suggested (random here, since getUserProfile returns null)
+    await waitFor(() => expect(nick.value).not.toBe(''))
+  })
+
+  it('takes a returning admin straight to the reader, skipping the nickname screen', async () => {
+    getUserProfile.mockResolvedValueOnce({ nickname: 'AmberFox33', color: 'amber' })
+    renderAdminApp()
+
+    await fireAuth(GOOGLE_ADMIN)
+
+    await waitFor(() => expect(screen.getByText(/set homework/i)).toBeInTheDocument())
+    expect(screen.queryByLabelText(/nickname/i)).not.toBeInTheDocument()
   })
 
   it('shows the admin homework panel after setup', async () => {

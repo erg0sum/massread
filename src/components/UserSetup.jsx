@@ -9,16 +9,17 @@ const COLORS = [
   { id: 'orange', label: 'Orange', hex: '#FB923C' },
 ]
 
-export default function UserSetup({ onSetup, onGoogleSignIn, googleDisplayName = '', isAdmin = false, bookTitle = 'this book' }) {
-  const [name, setName] = useState(googleDisplayName)
+export default function UserSetup({ onSetup, onGoogleSignIn, suggestedNickname = '', isAdmin = false, bookTitle = 'this book' }) {
+  const [name, setName] = useState(suggestedNickname)
   const [color, setColor] = useState(COLORS[0].id)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [googleError, setGoogleError] = useState('')
 
-  // Pre-fill name once the redirect result resolves after page load
+  // Pre-fill with the suggested nickname once it's available (it arrives after
+  // the async profile lookup that follows Google sign-in)
   useEffect(() => {
-    if (googleDisplayName) setName(googleDisplayName)
-  }, [googleDisplayName])
+    if (suggestedNickname) setName(suggestedNickname)
+  }, [suggestedNickname])
 
   function handleSubmit(e) {
     e.preventDefault()
@@ -56,12 +57,12 @@ export default function UserSetup({ onSetup, onGoogleSignIn, googleDisplayName =
 
         {onGoogleSignIn && (
           <div className="google-signin-section">
-            {googleDisplayName ? (
+            {suggestedNickname ? (
               <div className="google-signed-in" role="status">
                 <span className="google-check" aria-hidden="true">✓</span>
                 <span>
-                  Signed in as <strong>{googleDisplayName}</strong>.<br />
-                  Choose a nickname to continue.
+                  Signed in with Google.<br />
+                  We suggested a nickname — keep it or pick your own.
                 </span>
               </div>
             ) : (
@@ -84,7 +85,7 @@ export default function UserSetup({ onSetup, onGoogleSignIn, googleDisplayName =
               </>
             )}
             <div className="setup-divider">
-              <span>{googleDisplayName ? 'next' : 'or'}</span>
+              <span>{suggestedNickname ? 'next' : 'or'}</span>
             </div>
           </div>
         )}
